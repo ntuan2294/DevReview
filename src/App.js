@@ -1,11 +1,16 @@
+import React from "react";
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import Login from "./components/Login";
+import CodeInput from "./components/CodeInput"; // Component editor
 
 function App() {
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <h1 className="text-3xl font-bold text-center text-blue-700">DevReivew</h1>
-      <Login />
-    </div>
+    <Router>
+      <Routes>
+        <Route path="/" element={<Login />} />
+        <Route path="/editor" element={<CodeInput />} />
+      </Routes>
+    </Router>
   );
 }
 
