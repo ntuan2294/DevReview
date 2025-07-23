@@ -3,6 +3,8 @@ package com.example.controller;
 import com.example.model.UserRequest;
 import com.example.model.ReviewRequest;
 import com.example.service.AIService;
+import com.example.service.UserService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
@@ -13,18 +15,15 @@ import java.util.Map;
 @CrossOrigin(origins = "*")
 public class ApiController {
 
-    private final Map<String, String> users = new HashMap<>();
-    private final AIService aiService = new AIService();
+    @Autowired
+    private UserService userService;
 
-    public ApiController() {
-        // Tài khoản mặc định
-        users.put("admin", "123456");
-    }
+    private final AIService aiService = new AIService();
 
     @PostMapping("/login")
     public Map<String, Object> login(@RequestBody UserRequest req) {
         Map<String, Object> res = new HashMap<>();
-        if (users.containsKey(req.getUsername()) && users.get(req.getUsername()).equals(req.getPassword())) {
+        if (userService.checkLogin(req.getUsername(), req.getPassword())) {
             res.put("success", true);
             res.put("message", "Đăng nhập thành công");
             res.put("user", Map.of("username", req.getUsername()));
@@ -38,11 +37,11 @@ public class ApiController {
     @PostMapping("/register")
     public Map<String, Object> register(@RequestBody UserRequest req) {
         Map<String, Object> res = new HashMap<>();
-        if (users.containsKey(req.getUsername())) {
+        if (userService.isUsernameExists(req.getUsername())) {
             res.put("success", false);
             res.put("message", "Tài khoản đã tồn tại");
         } else {
-            users.put(req.getUsername(), req.getPassword());
+            userService.register(req.getUsername(), req.getPassword());
             res.put("success", true);
             res.put("message", "Đăng ký thành công");
         }

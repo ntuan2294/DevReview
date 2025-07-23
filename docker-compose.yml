@@ -1,0 +1,18 @@
+services:
+  backend:
+    build:
+      context: ./BE
+    container_name: myapp-backend
+    ports:
+      - "8000:8000"
+    restart: always
+
+  frontend:
+    build:
+      context: ./FE
+    container_name: myapp-frontend
+    ports:
+      - "3000:3000"
+    restart: always
+    depends_on:
+      - backend
