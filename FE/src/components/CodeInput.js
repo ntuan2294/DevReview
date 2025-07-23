@@ -11,7 +11,6 @@ const CodeInput = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Kiểm tra người dùng đã đăng nhập chưa
     const user = AuthService.getCurrentUser();
     if (!user) {
       navigate("/");
@@ -20,7 +19,6 @@ const CodeInput = () => {
     setCurrentUser(user);
   }, [navigate]);
 
-  // Xử lý nút back trình duyệt
   useEffect(() => {
     const handlePopState = () => {
       setSubmitted(false);
@@ -30,10 +28,9 @@ const CodeInput = () => {
     return () => window.removeEventListener("popstate", handlePopState);
   }, []);
 
-  // Hàm Đăng xuất
   const handleLogout = () => {
     AuthService.logout();
-    navigate("/login");
+    navigate("/");
   };
 
   const handleSubmit = async () => {
@@ -43,14 +40,14 @@ const CodeInput = () => {
     }
 
     try {
-      const res = await fetch('http://localhost:8000/api/review', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("http://localhost:8000/api/review", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           language,
           code,
-          user: currentUser.username
-        })
+          user: currentUser.username,
+        }),
       });
 
       const data = await res.json();
@@ -74,18 +71,24 @@ const CodeInput = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      {/* Header với thông tin user */}
-      <header className="bg-white shadow-sm border-b">
+    <div className="min-h-screen bg-gradient-to-br from-blue-100 to-purple-200">
+      {/* Header */}
+      <header className="bg-transparent shadow-none border-none">
         <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
-          <h1 className="text-xl font-semibold text-gray-800">AI Code Review</h1>
+          <h1
+            className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-700 via-purple-700 to-pink-600 drop-shadow-md tracking-wide"
+            style={{ fontFamily: '"Orbitron", sans-serif' }}
+          >
+            DEVREVIEW
+          </h1>
           <div className="flex items-center space-x-4">
-            <span className="text-sm text-gray-600">
-              Xin chào, <span className="font-medium">{currentUser.username}</span>
+            <span className="text-sm text-gray-800">
+              Xin chào,{" "}
+              <span className="font-semibold">{currentUser.username}</span>
             </span>
             <button
               onClick={handleLogout}
-              className="text-sm bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600 transition-colors"
+              className="text-sm text-red-600 border border-red-600 px-3 py-1 rounded hover:bg-red-600 hover:text-white transition-colors bg-transparent"
             >
               Đăng xuất
             </button>
@@ -98,7 +101,10 @@ const CodeInput = () => {
           <div className="max-w-5xl mx-auto bg-white rounded-xl shadow-md p-6 space-y-4">
             {/* Chọn ngôn ngữ */}
             <div className="flex items-center space-x-3">
-              <label htmlFor="language" className="font-medium text-gray-700">
+              <label
+                htmlFor="language"
+                className="font-medium text-gray-700"
+              >
                 Ngôn ngữ:
               </label>
               <select
@@ -173,13 +179,15 @@ const CodeInput = () => {
                 <h2 className="text-lg font-semibold mb-2">Kết quả Review:</h2>
                 <div className="bg-gray-100 p-4 rounded-lg">
                   {reviewResult ? (
-                    <div className="text-sm text-gray-700 whitespace-pre-wrap">{reviewResult.feedback}</div>
+                    <div className="text-sm text-gray-700 whitespace-pre-wrap">
+                      {reviewResult.feedback}
+                    </div>
                   ) : (
                     <p className="text-gray-500 italic mb-2">Đang xử lý...</p>
                   )}
                   <div className="text-sm text-gray-400 mt-4">
                     <p>• Ngôn ngữ: {language.toUpperCase()}</p>
-                    <p>• Số dòng: {code.split('\n').length}</p>
+                    <p>• Số dòng: {code.split("\n").length}</p>
                     <p>• Số ký tự: {code.length}</p>
                     <p>• Người dùng: {currentUser.username}</p>
                   </div>

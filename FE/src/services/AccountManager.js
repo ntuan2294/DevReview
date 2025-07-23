@@ -37,7 +37,8 @@ class AccountManager {
       });
       return res.data;
     } catch (error) {
-      return { success: false, message: 'Lỗi kết nối server!' };
+      console.error(error.response?.data?.message || "Lỗi hệ thống");
+      alert(error.response?.data?.message || "Đăng ký thất bại");
     }
   }
 

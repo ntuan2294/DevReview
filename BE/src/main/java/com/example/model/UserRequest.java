@@ -4,6 +4,9 @@ public class UserRequest {
     private String username;
     private String password;
 
+    public UserRequest() {
+    } // Constructor rỗng cần thiết để Spring bind JSON
+
     // Getter Setter
     public String getUsername() {
         return username;

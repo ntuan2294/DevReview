@@ -5,6 +5,7 @@ import com.example.model.ReviewRequest;
 import com.example.service.AIService;
 import com.example.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
@@ -54,5 +55,10 @@ public class ApiController {
         String feedback = aiService.mockReview(req.getLanguage(), req.getCode());
         res.put("feedback", feedback);
         return res;
+    }
+
+    @GetMapping("/test")
+    public String test() {
+        return "OK";
     }
 }
