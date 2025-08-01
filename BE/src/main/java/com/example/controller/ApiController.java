@@ -5,7 +5,6 @@ import com.example.model.ReviewRequest;
 import com.example.service.AIService;
 import com.example.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
@@ -18,8 +17,6 @@ public class ApiController {
 
     @Autowired
     private UserService userService;
-
-    private final AIService aiService = new AIService();
 
     @PostMapping("/login")
     public Map<String, Object> login(@RequestBody UserRequest req) {
@@ -52,7 +49,7 @@ public class ApiController {
     @PostMapping("/review")
     public Map<String, Object> review(@RequestBody ReviewRequest req) {
         Map<String, Object> res = new HashMap<>();
-        String feedback = aiService.mockReview(req.getLanguage(), req.getCode());
+        String feedback = AIService.reviewCode(req.getLanguage(), req.getCode());
         res.put("feedback", feedback);
         return res;
     }
