@@ -1,6 +1,7 @@
 package com.example.model;
 
 import jakarta.persistence.*;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.time.LocalDateTime;
 
 @Entity
@@ -11,8 +12,10 @@ public class ReviewHistory {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne
+    // ✅ THÊM: @JsonIgnoreProperties để chỉ serialize những field cần thiết
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
+    @JsonIgnoreProperties({ "reviewHistories", "password" }) // ⭐ Bỏ qua circular ref và password
     private User user;
 
     @Column(name = "original_code", columnDefinition = "TEXT")
@@ -33,7 +36,7 @@ public class ReviewHistory {
         this.createdAt = LocalDateTime.now();
     }
 
-    // === GETTER & SETTER === (giữ nguyên)
+    // === GETTER & SETTER ===
     public Long getId() {
         return id;
     }

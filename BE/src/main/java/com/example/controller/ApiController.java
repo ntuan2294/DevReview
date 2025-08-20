@@ -12,6 +12,7 @@ import com.example.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.transaction.annotation.Transactional;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -32,6 +33,9 @@ public class ApiController {
 
     @Autowired
     private ReviewHistoryService reviewHistoryService;
+
+    @Autowired
+    private ReviewHistoryRepository reviewHistoryRepository;
 
     @PostMapping("/login")
     public Map<String, Object> login(@RequestBody UserRequest req) {
@@ -71,6 +75,7 @@ public class ApiController {
     }
 
     @PostMapping("/history/save")
+    @Transactional // ✅ THÊM: Đảm bảo transaction đúng cách
     public ResponseEntity<?> saveHistory(@RequestBody Map<String, Object> payload) {
         try {
             System.out.println("Nhận payload: " + payload);
@@ -129,34 +134,60 @@ public class ApiController {
         }
     }
 
-    // Thêm vào ApiController.java các endpoint sau:
-
-    // Thêm vào ApiController.java
-
+    // ✅ TỐI ƯU: Sử dụng @Transactional(readOnly = true) cho read operations
     @GetMapping("/history/{username}")
+    @Transactional(readOnly = true)
     public ResponseEntity<List<ReviewHistory>> getHistoryByUsername(@PathVariable String username) {
         try {
             List<ReviewHistory> history = reviewHistoryService.getHistory(username);
             return ResponseEntity.ok(history);
         } catch (Exception e) {
             System.err.println("Lỗi khi lấy lịch sử: " + e.getMessage());
+            e.printStackTrace();
             return ResponseEntity.status(500).build();
         }
     }
 
-    @Autowired
-    private ReviewHistoryRepository reviewHistoryRepository;
-
     @GetMapping("/history/detail/{id}")
-    public ReviewHistory getHistoryDetail(@PathVariable Long id) {
-        return reviewHistoryRepository.findById(id).orElse(null); // ✅ đúng
+    @Transactional(readOnly = true) // ✅ THÊM: Read-only transaction
+    public ResponseEntity<ReviewHistory> getHistoryDetail(@PathVariable Long id) {
+        try {
+            return reviewHistoryRepository.findById(id)
+                    .map(ResponseEntity::ok)
+                    .orElse(ResponseEntity.notFound().build());
+        } catch (Exception e) {
+            System.err.println("Lỗi khi lấy chi tiết lịch sử: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.status(500).build();
+        }
     }
 
     @GetMapping("/history/item/{id}")
+    @Transactional(readOnly = true) // ✅ THÊM: Read-only transaction
     public ResponseEntity<ReviewHistory> getHistoryItem(@PathVariable Long id) {
         return reviewHistoryRepository.findById(id)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
 
+    // ✅ THÊM: API endpoint để frontend có thể lấy user info
+    @GetMapping("/user/{username}")
+    @Transactional(readOnly = true)
+    public ResponseEntity<Map<String, Object>> getUserByUsername(@PathVariable String username) {
+        try {
+            return userRepository.findByUsername(username)
+                    .map(user -> {
+                        Map<String, Object> response = new HashMap<>();
+                        response.put("id", user.getId());
+                        response.put("username", user.getUsername());
+                        // Không trả về password vì lý do bảo mật
+                        return ResponseEntity.ok(response);
+                    })
+                    .orElse(ResponseEntity.notFound().build());
+        } catch (Exception e) {
+            System.err.println("Lỗi khi lấy thông tin user: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.status(500).build();
+        }
+    }
 }
