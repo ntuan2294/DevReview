@@ -55,7 +55,14 @@ const CodeResultPage = () => {
             return;
           }
         }
-
+        const payload = {
+        userId: userId,
+        username: currentUser.username,
+        originalCode: code || "",
+        reviewSummary: reviewResult.feedback || reviewResult.summary || "",
+        fixedCode: reviewResult.improvedCode || reviewResult.fixedCode || "",
+        language: language || "unknown" // Thêm dòng này
+      };
         // Lưu vào CSDL
         if (userId) {
           const payload = {

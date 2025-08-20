@@ -86,4 +86,21 @@ public class ReviewHistoryService {
                 ? cleaned.substring(0, 77) + "..."
                 : cleaned;
     }
+
+    public ReviewHistory saveHistory(User user, String originalCode, String reviewSummary, String fixedCode,
+            String language) {
+        ReviewHistory history = new ReviewHistory();
+        history.setUser(user);
+        history.setOriginalCode(originalCode);
+        history.setReviewSummary(reviewSummary);
+        history.setFixedCode(fixedCode);
+        history.setLanguage(language); // Thêm dòng này
+        return reviewHistoryRepository.save(history);
+    }
+
+    // Method để tạo display name theo yêu cầu
+    public String createHistoryDisplayName(ReviewHistory history) {
+        String language = history.getLanguage() != null ? history.getLanguage().toUpperCase() : "UNKNOWN";
+        return String.format("Review %s Code #%d", language, history.getId());
+    }
 }

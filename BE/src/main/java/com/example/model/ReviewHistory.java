@@ -84,4 +84,16 @@ public class ReviewHistory {
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
     }
+
+    @Column(name = "language")
+    private String language; // Thêm field này
+
+    // Getter và Setter cho language
+    public String getLanguage() {
+        return language;
+    }
+
+    public void setLanguage(String language) {
+        this.language = language;
+    }
 }

@@ -13,12 +13,20 @@ const CodeEditorPage = () => {
   const [historyItems, setHistoryItems] = useState([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const [lastRefreshTime, setLastRefreshTime] = useState(Date.now());
+  const [searchTerm, setSearchTerm] = useState("");
+  const [languageFilter, setLanguageFilter] = useState("all");
   const currentUser = AuthService.getCurrentUser();
+
+  // ✅ Function để tạo tên hiển thị theo format mới
+  const createHistoryTitle = (item) => {
+    const lang = item.language ? item.language.toUpperCase() : 'UNKNOWN';
+    return `Review ${lang} Code #${item.id}`;
+  };
 
   // ✅ Function để fetch lịch sử với force refresh option
   const fetchHistory = async (forceRefresh = false) => {
     try {
-      if (!forceRefresh && isLoadingHistory) return; // Prevent double loading
+      if (!forceRefresh && isLoadingHistory) return;
       
       if (forceRefresh || !isLoadingHistory) setIsLoadingHistory(true);
       
@@ -33,7 +41,6 @@ const CodeEditorPage = () => {
             'Cache-Control': 'no-cache, no-store, must-revalidate',
             'Pragma': 'no-cache',
             'Expires': '0',
-            // Add timestamp to prevent caching
             'X-Requested-At': Date.now().toString()
           }
         });
@@ -41,13 +48,13 @@ const CodeEditorPage = () => {
         console.log("✅ Raw response data:", response.data);
         console.log("📊 Records count:", response.data?.length || 0);
         
-        // Log chi tiết từng record
         if (response.data && Array.isArray(response.data)) {
           response.data.forEach((item, index) => {
             console.log(`📄 History record ${index + 1}:`, {
               id: item.id,
               userId: item.user?.id,
               username: item.user?.username,
+              language: item.language,
               summary: item.reviewSummary ? item.reviewSummary.substring(0, 50) + "..." : "No summary",
               createdAt: item.createdAt,
               hasOriginalCode: !!item.originalCode,
@@ -63,7 +70,6 @@ const CodeEditorPage = () => {
           setHistoryItems([]);
         }
         
-        // Clear refresh flags
         localStorage.removeItem('history_needs_refresh');
         
       } else {
@@ -80,7 +86,6 @@ const CodeEditorPage = () => {
         code: error.code
       });
       
-      // Don't reset historyItems on error, keep previous data
       if (!historyItems.length) {
         setHistoryItems([]);
       }
@@ -92,14 +97,13 @@ const CodeEditorPage = () => {
   // ✅ Load lịch sử khi component mount
   useEffect(() => {
     console.log("🚀 CodeEditorPage mounted, fetching history...");
-    fetchHistory(true); // Force refresh on mount
-  }, [currentUser?.username]); // Depend on username
+    fetchHistory(true);
+  }, [currentUser?.username]);
 
   // ✅ Listen cho custom event từ save action
   useEffect(() => {
     const handleHistoryUpdated = (event) => {
       console.log("🔔 Received historyUpdated event:", event.detail);
-      // Delay một chút để đảm bảo DB đã commit
       setTimeout(() => {
         fetchHistory(true);
       }, 1000);
@@ -119,22 +123,17 @@ const CodeEditorPage = () => {
         const saveTime = parseInt(lastSaveTime);
         const now = Date.now();
         
-        // Nếu đã save trong vòng 30 giây gần đây thì refresh
         if (now - saveTime < 30000) {
           console.log("🔄 Flag detected, refreshing history...");
           fetchHistory(true);
         } else {
-          // Clear old flags
           localStorage.removeItem('history_needs_refresh');
           localStorage.removeItem('last_save_time');
         }
       }
     };
 
-    // Kiểm tra ngay khi mount
     checkRefreshFlag();
-
-    // Kiểm tra định kỳ mỗi 3 giây
     const interval = setInterval(checkRefreshFlag, 3000);
     return () => clearInterval(interval);
   }, []);
@@ -145,7 +144,6 @@ const CodeEditorPage = () => {
       console.log("🔍 Window focused, checking for updates...");
       const lastRefreshAge = Date.now() - lastRefreshTime;
       
-      // Chỉ refresh nếu đã lâu không refresh (>10 giây)
       if (lastRefreshAge > 10000) {
         fetchHistory(true);
       }
@@ -160,6 +158,19 @@ const CodeEditorPage = () => {
     console.log("🔄 Manual refresh requested");
     fetchHistory(true);
   };
+
+  // ✅ Filter và search lịch sử
+  const filteredAndSearchedHistory = historyItems.filter(item => {
+    const matchesLanguage = languageFilter === 'all' || item.language === languageFilter;
+    const matchesSearch = searchTerm === '' || 
+      createHistoryTitle(item).toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (item.originalCode && item.originalCode.toLowerCase().includes(searchTerm.toLowerCase()));
+    
+    return matchesLanguage && matchesSearch;
+  });
+
+  // ✅ Lấy danh sách ngôn ngữ có trong lịch sử
+  const availableLanguages = [...new Set(historyItems.map(item => item.language).filter(Boolean))];
 
   const handleSubmit = async () => {
     if (!code.trim()) {
@@ -210,71 +221,6 @@ const CodeEditorPage = () => {
     navigate("/");
   };
 
-  // Tạo tóm tắt từ review summary
-  const createSummary = (reviewSummary) => {
-    if (!reviewSummary) return "Review không có tóm tắt";
-    
-    const cleanText = reviewSummary
-      .replace(/[#*`]/g, '')
-      .replace(/\n+/g, ' ')
-      .trim();
-    
-    const sentences = cleanText.split(/[.!?]+/);
-    const firstSentence = sentences[0]?.trim();
-    
-    if (firstSentence && firstSentence.length > 10) {
-      return firstSentence.length > 80 
-        ? `${firstSentence.substring(0, 77)}...`
-        : firstSentence;
-    }
-    
-    return cleanText.length > 80 
-      ? `${cleanText.substring(0, 77)}...`
-      : cleanText;
-  };
-
-  // Click vào history item
-  const handleHistoryClick = async (historyId) => {
-    try {
-      console.log(`🔍 Loading history detail for ID: ${historyId}`);
-      
-      const response = await axios.get(`http://localhost:8000/api/history/detail/${historyId}`);
-      const historyData = response.data;
-      
-      console.log("✅ Loaded history data:", historyData);
-      
-      const reviewResult = {
-        feedback: historyData.reviewSummary || "Không có feedback",
-        improvedCode: historyData.fixedCode || "Không có code đã sửa",
-        originalCode: historyData.originalCode || "",
-        summary: createSummary(historyData.reviewSummary),
-        isFromHistory: true,
-        historyId: historyId
-      };
-      
-      setReviewResult(reviewResult);
-      setCode(historyData.originalCode || "");
-      
-      const detectedLanguage = detectLanguageFromCode(historyData.originalCode);
-      if (detectedLanguage) {
-        setLanguage(detectedLanguage);
-      }
-      
-      navigate("/result");
-    } catch (error) {
-      console.error("❌ Error loading history detail:", error);
-      
-      let errorMessage = "Không thể tải chi tiết lịch sử!";
-      if (error.response?.status === 404) {
-        errorMessage = "Lịch sử review này không tồn tại!";
-      } else if (error.response?.status >= 500) {
-        errorMessage = "Lỗi server, vui lòng thử lại sau!";
-      }
-      
-      alert(errorMessage);
-    }
-  };
-
   const detectLanguageFromCode = (codeContent) => {
     if (!codeContent) return null;
     
@@ -293,6 +239,53 @@ const CodeEditorPage = () => {
     }
     
     return null;
+  };
+
+  // ✅ Click vào history item
+  const handleHistoryClick = async (historyId) => {
+    try {
+      console.log(`🔍 Loading history detail for ID: ${historyId}`);
+      
+      const response = await axios.get(`http://localhost:8000/api/history/detail/${historyId}`);
+      const historyData = response.data;
+      
+      console.log("✅ Loaded history data:", historyData);
+      
+      const reviewResult = {
+        feedback: historyData.reviewSummary || "Không có feedback",
+        improvedCode: historyData.fixedCode || "Không có code đã sửa",
+        originalCode: historyData.originalCode || "",
+        summary: historyData.reviewSummary ? historyData.reviewSummary.substring(0, 100) + "..." : "Không có tóm tắt",
+        isFromHistory: true,
+        historyId: historyId
+      };
+      
+      setReviewResult(reviewResult);
+      setCode(historyData.originalCode || "");
+      
+      // Set language từ database hoặc detect từ code
+      if (historyData.language) {
+        setLanguage(historyData.language);
+      } else {
+        const detectedLanguage = detectLanguageFromCode(historyData.originalCode);
+        if (detectedLanguage) {
+          setLanguage(detectedLanguage);
+        }
+      }
+      
+      navigate("/result");
+    } catch (error) {
+      console.error("❌ Error loading history detail:", error);
+      
+      let errorMessage = "Không thể tải chi tiết lịch sử!";
+      if (error.response?.status === 404) {
+        errorMessage = "Lịch sử review này không tồn tại!";
+      } else if (error.response?.status >= 500) {
+        errorMessage = "Lỗi server, vui lòng thử lại sau!";
+      }
+      
+      alert(errorMessage);
+    }
   };
 
   return (
@@ -326,14 +319,14 @@ const CodeEditorPage = () => {
           {/* Sidebar - Lịch sử */}
           <div className="col-span-1">
             <div className="bg-white rounded-xl shadow-md p-4">
+              {/* Header với search và filter */}
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-semibold text-gray-800">
                   Lịch sử Review
                   <span className="text-sm font-normal text-gray-500 ml-2">
-                    ({historyItems.length})
+                    ({filteredAndSearchedHistory.length}/{historyItems.length})
                   </span>
                 </h3>
-                {/* Refresh button */}
                 <button
                   onClick={handleRefreshHistory}
                   disabled={isLoadingHistory}
@@ -350,49 +343,86 @@ const CodeEditorPage = () => {
                   </svg>
                 </button>
               </div>
+
+              {/* Search box */}
+              <div className="mb-3">
+                <input
+                  type="text"
+                  placeholder="Tìm kiếm..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              {/* Language filter */}
+              {availableLanguages.length > 0 && (
+                <div className="mb-4">
+                  <select
+                    value={languageFilter}
+                    onChange={(e) => setLanguageFilter(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="all">Tất cả ngôn ngữ</option>
+                    {availableLanguages.map(lang => (
+                      <option key={lang} value={lang}>
+                        {lang?.toUpperCase() || 'Unknown'}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               
+              {/* History list */}
               {isLoadingHistory ? (
                 <div className="text-center text-gray-500 py-8">
                   <div className="animate-spin w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-2"></div>
                   <p className="text-sm">Đang tải lịch sử...</p>
                 </div>
-              ) : historyItems.length > 0 ? (
+              ) : filteredAndSearchedHistory.length > 0 ? (
                 <div className="space-y-3 max-h-96 overflow-y-auto">
-                  {historyItems.map((item, index) => (
+                  {filteredAndSearchedHistory.map((item, index) => (
                     <div
                       key={`${item.id}-${index}`}
                       onClick={() => handleHistoryClick(item.id)}
                       className="group p-3 border border-gray-200 rounded-lg hover:bg-blue-50 hover:border-blue-300 cursor-pointer transition-all duration-200"
                     >
-                      {/* Tóm tắt chính */}
-                      <div className="text-sm font-medium text-gray-800 mb-2">
-                        {createSummary(item.reviewSummary)}
+                      {/* Tiêu đề chính theo format mới */}
+                      <div className="text-sm font-semibold text-gray-800 mb-2">
+                        {createHistoryTitle(item)}
                       </div>
                       
-                      {/* Metadata */}
-                      <div className="flex justify-between items-center text-xs text-gray-500">
-                        <span className="bg-gray-100 px-2 py-1 rounded group-hover:bg-blue-100">
-                          ID: {item.id}
-                        </span>
-                        <span>
-                          {new Date(item.createdAt).toLocaleDateString('vi-VN', {
-                            day: '2-digit',
-                            month: '2-digit',
-                            year: '2-digit',
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          })}
-                        </span>
+                      {/* Thông tin ngày tạo */}
+                      <div className="text-xs text-gray-500 mb-2">
+                        {new Date(item.createdAt).toLocaleDateString('vi-VN', {
+                          day: '2-digit',
+                          month: '2-digit',
+                          year: '2-digit',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
                       </div>
                       
                       {/* Code preview */}
                       {item.originalCode && (
-                        <div className="mt-2 text-xs text-gray-400 font-mono bg-gray-50 p-1 rounded group-hover:bg-blue-50">
-                          {item.originalCode.length > 50 
-                            ? `${item.originalCode.substring(0, 47)}...` 
-                            : item.originalCode}
+                        <div className="text-xs text-gray-400 font-mono bg-gray-50 p-2 rounded group-hover:bg-blue-50 mb-2">
+                          <div className="line-clamp-2">
+                            {item.originalCode.length > 60 
+                              ? `${item.originalCode.substring(0, 57)}...` 
+                              : item.originalCode}
+                          </div>
                         </div>
                       )}
+                      
+                      {/* Footer với badge */}
+                      <div className="flex justify-between items-center">
+                        <span className="inline-block bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full group-hover:bg-blue-200 font-medium">
+                          {item.language ? item.language.toUpperCase() : 'N/A'}
+                        </span>
+                        <span className="text-xs text-gray-400 font-mono">
+                          #{item.id}
+                        </span>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -403,14 +433,27 @@ const CodeEditorPage = () => {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                     </svg>
                   </div>
-                  <p className="text-sm">Chưa có lịch sử review</p>
-                  <p className="text-xs mt-1">Hãy review code đầu tiên!</p>
-                  {/* Debug info */}
-                  <div className="mt-4 text-xs text-gray-400 space-y-1">
-                    <p>User: {currentUser?.username || 'null'}</p>
-                    <p>Loading: {isLoadingHistory ? 'Yes' : 'No'}</p>
-                    <p>Last refresh: {new Date(lastRefreshTime).toLocaleTimeString()}</p>
-                  </div>
+                  <p className="text-sm">
+                    {historyItems.length === 0 
+                      ? "Chưa có lịch sử review" 
+                      : "Không tìm thấy kết quả phù hợp"
+                    }
+                  </p>
+                  <p className="text-xs mt-1">
+                    {historyItems.length === 0 
+                      ? "Hãy review code đầu tiên!" 
+                      : "Thử thay đổi từ khóa tìm kiếm"
+                    }
+                  </p>
+                  
+                  {/* Debug info chỉ hiện khi không có data */}
+                  {historyItems.length === 0 && (
+                    <div className="mt-4 text-xs text-gray-400 space-y-1">
+                      <p>User: {currentUser?.username || 'null'}</p>
+                      <p>Loading: {isLoadingHistory ? 'Yes' : 'No'}</p>
+                      <p>Last refresh: {new Date(lastRefreshTime).toLocaleTimeString()}</p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
