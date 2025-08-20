@@ -4,6 +4,15 @@ public class ReviewRequest {
     private String language;
     private String code;
     private String user;
+    private Long userId;
+
+    public Long getUserId() {
+        return userId;
+    }
+
+    public void setUserId(Long userId) {
+        this.userId = userId;
+    }
 
     // Getter Setter
     public String getLanguage() {

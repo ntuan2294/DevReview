@@ -1,100 +1,136 @@
 package com.example.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.stereotype.Service;
+
+import java.io.IOException;
 import java.net.URI;
-import java.net.http.*;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
-import com.google.gson.*;
-
+@Service
 public class AIService {
 
-  private static final String API_KEY = "AIzaSyAMU4ChLP876TnowgNxEXy6EfkAK7Q1YKU"; // ❗️Thay bằng key thật
-  private static final String MODEL = "gemini-2.0-flash";
+  // Nên load từ biến môi trường thay vì hardcode
+  private static final String API_KEY = "AIzaSyAMU4ChLP876TnowgNxEXy6EfkAK7Q1YKU";
   private static final String BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models/";
+  private static final String MODEL = "gemini-2.0-flash";
+  private static final String GENERATE_CONTENT_ENDPOINT = ":generateContent?key=";
+  private static final String CONTENT_TYPE = "application/json";
+  private static final int HTTP_OK = 200;
 
-  public static String reviewCode(String language, String codeSnippet) {
+  // Regex code block mềm hơn (bắt cả trường hợp có/không tên ngôn ngữ và khoảng
+  // trắng)
+  private static final Pattern CODE_PATTERN = Pattern.compile(
+      "```\\s*([a-zA-Z0-9]*)?\\s*\\n?([\\s\\S]*?)```",
+      Pattern.MULTILINE);
+
+  public Map<String, Object> reviewCode(String language, String codeSnippet) {
+    Map<String, Object> result = new HashMap<>();
+
     try {
-      // ✅ Tạo prompt đánh giá mã nguồn đã được chỉnh sửa
-      String prompt = String.format(
-          """
-              Bạn là một chuyên gia đánh giá chất lượng mã nguồn. Hãy phân tích đoạn mã %s sau đây và thực hiện các yêu cầu sau theo đúng định dạng:
-
-              **1. Phát hiện và liệt kê lỗi logic:**
-              (Liệt kê tất cả lỗi logic nếu có, kèm theo giải thích rõ ràng. Nếu không có lỗi thì ghi "Không có lỗi logic.")
-
-              **2. Cảnh báo về các vấn đề phong cách lập trình:**
-              (Chỉ ra các vấn đề về định dạng mã và phong cách theo chuẩn của ngôn ngữ. Nếu không có vấn đề thì ghi "Không có vấn đề về phong cách.")
-
-              **3. Gợi ý cải thiện:**
-              (Đưa ra các gợi ý để cải thiện hiệu suất, khả năng đọc hiểu và bảo trì của đoạn mã.)
-
-              **4. Mã đã được chỉnh sửa:**
-              ```%s
-              [Viết lại đoạn mã đã được cải thiện tại đây]
-              ```
-
-              Đây là đoạn mã cần phân tích:
-
-              %s
-              """,
-          language, language, codeSnippet);
-
-      // ✅ Tạo JSON body bằng Gson
-      JsonObject textPart = new JsonObject();
-      textPart.addProperty("text", prompt);
-
-      JsonArray parts = new JsonArray();
-      parts.add(textPart);
-
-      JsonObject content = new JsonObject();
-      content.add("parts", parts);
-
-      JsonArray contents = new JsonArray();
-      contents.add(content);
-
-      JsonObject requestBodyJson = new JsonObject();
-      requestBodyJson.add("contents", contents);
-
-      String requestBody = requestBodyJson.toString();
-
-      String url = BASE_URL + MODEL + ":generateContent?key=" + API_KEY;
+      String prompt = buildPrompt(language, codeSnippet);
+      String requestBody = createRequestBody(prompt);
+      String url = BASE_URL + MODEL + GENERATE_CONTENT_ENDPOINT + API_KEY;
 
       HttpRequest request = HttpRequest.newBuilder()
           .uri(URI.create(url))
-          .header("Content-Type", "application/json")
+          .header("Content-Type", CONTENT_TYPE)
           .POST(HttpRequest.BodyPublishers.ofString(requestBody, StandardCharsets.UTF_8))
           .build();
 
       HttpClient client = HttpClient.newHttpClient();
       HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
 
-      // ✅ In response HTTP status và body nếu cần
-      int statusCode = response.statusCode();
-      String body = response.body();
-
-      if (statusCode != 200) {
-        return "❌ Lỗi HTTP " + statusCode + ": \n" + body;
+      if (response.statusCode() != HTTP_OK) {
+        result.put("feedback", "❌ Lỗi HTTP " + response.statusCode() + ":\n" + response.body());
+        return result;
       }
 
-      // ✅ Parse JSON để lấy nội dung văn bản
-      JsonObject json = JsonParser.parseString(body).getAsJsonObject();
-      JsonArray candidates = json.getAsJsonArray("candidates");
+      return parseGeminiResponse(codeSnippet, response.body());
 
-      if (candidates != null && !candidates.isEmpty()) {
-        JsonObject contentObj = candidates.get(0).getAsJsonObject().getAsJsonObject("content");
-        JsonArray partsArr = contentObj.getAsJsonArray("parts");
+    } catch (IOException e) {
+      result.put("feedback", "❗ Lỗi IO khi gọi Gemini API: " + e.getMessage());
+    } catch (InterruptedException e) {
+      result.put("feedback", "❗ Gọi Gemini API bị gián đoạn: " + e.getMessage());
+    } catch (Exception e) {
+      result.put("feedback", "❗ Lỗi không xác định khi gọi Gemini API: " + e.getMessage());
+    }
+    return result;
+  }
 
-        if (partsArr != null && !partsArr.isEmpty()) {
-          String reply = partsArr.get(0).getAsJsonObject().get("text").getAsString();
-          // Loại bỏ header không cần thiết và chỉ trả về nội dung chính
-          return reply.trim();
+  private String buildPrompt(String language, String codeSnippet) {
+    String safeCode = codeSnippet.replace("\\", "\\\\").replace("\"", "\\\"");
+
+    return String.format(
+        "Bạn là một chuyên gia đánh giá mã nguồn. "
+            + "Hãy phân tích đoạn mã %s sau đây và trả lời đúng format:\n\n"
+            + "1. Liệt kê lỗi logic (nếu có, nếu không ghi 'Không có lỗi logic').\n"
+            + "2. Cảnh báo phong cách lập trình (nếu không có ghi 'Không có vấn đề về phong cách').\n"
+            + "3. Gợi ý cải thiện.\n"
+            + "4. Viết lại code đã cải thiện, đặt trong code block markdown đúng chuẩn:\n```%s\n[your code here]\n```\n"
+            + "5. Tóm tắt ngắn gọn kết quả review (1-2 câu).\n\n"
+            + "Đây là đoạn code:\n%s",
+        language.toUpperCase(), language.toLowerCase(), safeCode);
+  }
+
+  private String createRequestBody(String prompt) {
+    return String.format(
+        "{ \"contents\": [ { \"parts\": [ { \"text\": \"%s\" } ] } ] }",
+        prompt.replace("\n", "\\n"));
+  }
+
+  private Map<String, Object> parseGeminiResponse(String originalCode, String body) throws IOException {
+    Map<String, Object> result = new HashMap<>();
+    ObjectMapper mapper = new ObjectMapper();
+    JsonNode root = mapper.readTree(body);
+
+    if (!root.has("candidates")) {
+      result.put("feedback", "⚠ Không nhận được phản hồi từ Gemini.");
+      return result;
+    }
+
+    // Lấy toàn bộ text trả về
+    StringBuilder fullText = new StringBuilder();
+    for (JsonNode candidate : root.get("candidates")) {
+      JsonNode parts = candidate.path("content").path("parts");
+      for (JsonNode part : parts) {
+        if (part.has("text")) {
+          fullText.append(part.get("text").asText()).append("\n");
         }
       }
-
-      return "⚠️ Không tìm thấy nội dung phản hồi từ Gemini.";
-
-    } catch (Exception e) {
-      return "❗️Lỗi khi gọi Gemini API: " + e.getMessage();
     }
+
+    String allText = fullText.toString().trim();
+
+    // 1️⃣ Tìm code đã cải thiện
+    Matcher matcher = CODE_PATTERN.matcher(allText);
+    String improvedCode = "";
+    if (matcher.find()) {
+      improvedCode = matcher.group(2).trim(); // group(2) là phần code
+    }
+
+    // 2️⃣ Loại bỏ code block khỏi feedback
+    String feedbackWithoutCode = allText.replaceAll("```[a-zA-Z0-9]*\\s*\\n[\\s\\S]*?```", "").trim();
+
+    // 3️⃣ Lấy summary (1-2 câu đầu)
+    String[] sentences = feedbackWithoutCode.split("\\. ");
+    String summary = sentences.length > 2
+        ? String.join(". ", sentences[0], sentences[1]) + "."
+        : feedbackWithoutCode;
+
+    // 4️⃣ Gán vào kết quả
+    result.put("originalCode", originalCode);
+    result.put("feedback", feedbackWithoutCode);
+    result.put("improvedCode", improvedCode.isEmpty() ? "⚠ Không tìm thấy code đã sửa." : improvedCode);
+    result.put("summary", summary);
+    return result;
   }
 }

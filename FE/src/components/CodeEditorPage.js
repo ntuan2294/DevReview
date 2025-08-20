@@ -1,82 +1,69 @@
-import React, { useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { useCode } from "./CodeContext";
+import ReviewSection from "./ReviewSection";
 import AuthService from "../services/AuthService";
-import FileService from "../services/FileService";
-import FormInputSection from "./FormCodeInput";
+import SaveService from "../services/SaveService"; // gọi API save history
+import axios from "axios";
 
-const CodeEditorPage = () => {
-  const { code, setCode, language, setLanguage, setReviewResult } = useCode();
-  const [isProcessingFile, setIsProcessingFile] = useState(false);
-  const fileInputRef = useRef(null);
-  const currentUser = AuthService.getCurrentUser();
+const CodeResultPage = () => {
   const navigate = useNavigate();
+  const { id } = useParams(); // lấy id nếu đi từ lịch sử
+  const { code, language, reviewResult, setCode, setReviewResult } = useCode();
+  const currentUser = AuthService.getCurrentUser();
 
-  const handleSubmit = async () => {
-    if (!code.trim()) {
-      alert("Vui lòng nhập code trước khi gửi!");
-      return;
+  // state khi load từ DB
+  const [historyData, setHistoryData] = useState(null);
+
+  // Nếu có id (người dùng bấm lịch sử) → gọi API để lấy dữ liệu
+  useEffect(() => {
+    if (id) {
+      axios
+        .get(`/api/history/item/${id}`)
+        .then((res) => {
+          setHistoryData(res.data);
+        })
+        .catch((err) => {
+          console.error("Lỗi khi load history:", err);
+        });
     }
+  }, [id]);
 
+  // Quay lại trang editor
+  const handleBack = () => navigate("/editor");
+
+  // Code mới → lưu lịch sử trước rồi reset state
+  const handleNew = async () => {
     try {
-      const res = await fetch("http://localhost:8000/api/review", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      if (reviewResult && currentUser) {
+        await SaveService.saveHistory({
+          username: currentUser.username,
           language,
           code,
-          user: AuthService.getCurrentUser().username,
-        }),
-      });
-
-      const data = await res.json();
-      setReviewResult(data);
-      // Navigate bình thường, không dùng replace
-      navigate("/result");
-    } catch (error) {
-      alert("Lỗi kết nối server!");
+          feedback: reviewResult.feedback,
+          fixedCode: reviewResult.fixedCode,
+        });
+      }
+    } catch (err) {
+      console.error("Lỗi khi lưu lịch sử:", err);
     }
+    // reset editor
+    setCode("");
+    setReviewResult(null);
+    navigate("/editor", { replace: true });
   };
 
   const handleLogout = () => {
     AuthService.logout();
     navigate("/");
   };
-  
-  const handleFileUpload = async (event) => {
-    const file = event.target.files[0];
-    if (!file) return;
-    setIsProcessingFile(true);
 
-    try {
-      const result = await FileService.processFile(file);
-      if (result.success) {
-        const { content, language: detectedLanguage } = result.data;
-        setCode(content);
-        if (detectedLanguage) setLanguage(detectedLanguage);
-      } else {
-        alert(`Lỗi: ${result.error}`);
-      }
-    } catch (error) {
-      alert(`Lỗi không mong muốn: ${error.message}`);
-    } finally {
-      setIsProcessingFile(false);
-      event.target.value = "";
-    }
-  };
-
-  const handleFileButtonClick = () => {
-    if (isProcessingFile) return;
-    fileInputRef.current?.click();
-  };
-
-  const handleNewCode = () => {
-    setCode("");
-    setReviewResult(null);
-  };
+  // Lấy dữ liệu để truyền xuống ReviewSection
+  const displayData = id ? historyData : reviewResult;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-100 to-purple-200">
+    <div className="min-h-screen bg-gradient-to-br from-blue-100 to-purple-200 flex flex-col">
+      {/* Header */}
       <header className="bg-transparent shadow-none border-none">
         <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
           <h1
@@ -87,7 +74,8 @@ const CodeEditorPage = () => {
           </h1>
           <div className="flex items-center space-x-4">
             <span className="text-sm text-gray-800">
-              Xin chào, <span className="font-semibold">{currentUser.username}</span>
+              Xin chào,{" "}
+              <span className="font-semibold">{currentUser.username}</span>
             </span>
             <button
               onClick={handleLogout}
@@ -98,21 +86,27 @@ const CodeEditorPage = () => {
           </div>
         </div>
       </header>
-      <FormInputSection
-        language={language}
-        setLanguage={setLanguage}
-        code={code}
-        setCode={setCode}
-        handleFileUpload={handleFileUpload}
-        handleFileButtonClick={handleFileButtonClick}
-        handleSubmit={handleSubmit}
-        handleNewCode={handleNewCode}
-        isProcessingFile={isProcessingFile}
-        fileInputRef={fileInputRef}
-        allowedExtensions={FileService.ALLOWED_EXTENSIONS}
-      />
+
+      {/* Body */}
+      <div className="flex-1 max-w-7xl mx-auto px-6 py-6 w-full">
+        {displayData ? (
+          <ReviewSection
+            code={id ? historyData?.code : code}
+            language={id ? historyData?.language : language}
+            reviewResult={displayData}
+            fixedCode={id ? historyData?.fixedCode : reviewResult?.fixedCode}
+            currentUser={currentUser}
+            onBack={handleBack}
+            onNew={handleNew}
+          />
+        ) : (
+          <p className="text-center text-gray-600">
+            Đang tải dữ liệu hoặc chưa có kết quả review...
+          </p>
+        )}
+      </div>
     </div>
   );
 };
 
-export default CodeEditorPage;
+export default CodeResultPage;

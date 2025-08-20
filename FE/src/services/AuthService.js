@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_URL = "http://localhost:8000/api";
+const API_URL = "http://localhost:8000/api"; // Fix URL để khớp với SaveService
 
 const AuthService = {
   login: async (username, password) => {
@@ -24,6 +24,17 @@ const AuthService = {
 
   logout: () => {
     sessionStorage.removeItem("current_user");
+  },
+
+  // Thêm method để lấy userId từ backend
+  getUserId: async (username) => {
+    try {
+      const response = await axios.get(`${API_URL}/user/${username}`);
+      return response.data.id;
+    } catch (error) {
+      console.error("Lỗi khi lấy user ID:", error);
+      throw error;
+    }
   }
 };
 
