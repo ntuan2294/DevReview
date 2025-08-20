@@ -13,6 +13,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -128,20 +129,18 @@ public class ApiController {
         }
     }
 
-    // Thêm endpoint này vào ApiController.java
-    @GetMapping("/user/{username}")
-    public ResponseEntity<?> getUserByUsername(@PathVariable String username) {
+    // Thêm vào ApiController.java các endpoint sau:
+
+    // Thêm vào ApiController.java
+
+    @GetMapping("/history/{username}")
+    public ResponseEntity<List<ReviewHistory>> getHistoryByUsername(@PathVariable String username) {
         try {
-            User user = userRepository.findByUsername(username)
-                    .orElseThrow(() -> new RuntimeException("User not found"));
-
-            Map<String, Object> response = new HashMap<>();
-            response.put("id", user.getId());
-            response.put("username", user.getUsername());
-
-            return ResponseEntity.ok(response);
+            List<ReviewHistory> history = reviewHistoryService.getHistory(username);
+            return ResponseEntity.ok(history);
         } catch (Exception e) {
-            return ResponseEntity.status(404).body("User not found");
+            System.err.println("Lỗi khi lấy lịch sử: " + e.getMessage());
+            return ResponseEntity.status(500).build();
         }
     }
 

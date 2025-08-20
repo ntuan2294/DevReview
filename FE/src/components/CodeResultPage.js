@@ -4,6 +4,7 @@ import { useCode } from "./CodeContext";
 import ReviewSection from "./ReviewSection";
 import AuthService from "../services/AuthService";
 import SaveService from "../services/SaveService";
+import axios from "axios"; // Thêm import axios
 
 const CodeResultPage = () => {
   const navigate = useNavigate();
@@ -18,48 +19,89 @@ const CodeResultPage = () => {
     console.log("Current user:", currentUser);
     console.log("Review result:", reviewResult);
 
-    // Bắt đầu lưu lịch sử
-    if (reviewResult && currentUser && currentUser.username) {
+    // Hỏi user có muốn lưu không (nếu có dữ liệu)
+    const shouldSave = reviewResult && currentUser && currentUser.username && 
+                     window.confirm("Bạn có muốn lưu kết quả review này vào lịch sử không?");
+
+    if (shouldSave) {
       try {
         let userId;
         
-        // Nếu currentUser có id thì dùng, không thì lấy từ API
+        // Lấy userId
         if (currentUser.id) {
           userId = currentUser.id;
           console.log("Sử dụng userId từ currentUser:", userId);
         } else {
           console.log("Lấy userId từ API cho username:", currentUser.username);
-          userId = await AuthService.getUserId(currentUser.username);
-          console.log("Đã lấy được userId:", userId);
+          try {
+            // Sử dụng axios thay vì fetch để consistent với các service khác
+            const response = await axios.get(`http://localhost:8000/api/user/${currentUser.username}`, {
+              timeout: 5000
+            });
+            userId = response.data.id;
+            console.log("Đã lấy được userId:", userId);
+          } catch (userError) {
+            console.error("Không thể lấy userId:", userError);
+            
+            // Xử lý các loại lỗi khác nhau
+            let errorMessage = "Không thể kết nối với server";
+            
+            if (userError.code === 'ECONNREFUSED') {
+              errorMessage = "Backend server không chạy (port 8000)";
+            } else if (userError.response?.status === 404) {
+              errorMessage = `User '${currentUser.username}' không tồn tại trong hệ thống`;
+            } else if (userError.code === 'ECONNABORTED') {
+              errorMessage = "Kết nối bị timeout";
+            }
+            
+            alert(`${errorMessage}\nDữ liệu sẽ không được lưu.`);
+            // Vẫn cho phép tiếp tục mà không lưu
+          }
         }
 
-        const payload = {
-          userId: userId,
-          originalCode: code || "",
-          reviewSummary: reviewResult.feedback || reviewResult.summary || "",
-          fixedCode: reviewResult.improvedCode || reviewResult.fixedCode || ""
-        };
-        
-        console.log("Payload gửi đi:", JSON.stringify(payload, null, 2));
-        
-        // Đợi yêu cầu lưu hoàn thành trước khi tiếp tục
-        const result = await SaveService.saveReview(payload);
-        console.log("Lưu lịch sử thành công!", result);
+        // Chỉ lưu nếu có userId
+        if (userId) {
+          const payload = {
+            userId: userId,
+            username: currentUser.username,
+            originalCode: code || "",
+            reviewSummary: reviewResult.feedback || reviewResult.summary || "",
+            fixedCode: reviewResult.improvedCode || reviewResult.fixedCode || ""
+          };
+          
+          console.log("Payload gửi đi:", JSON.stringify(payload, null, 2));
+          
+          // Gửi request với timeout
+          const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error("Request timeout")), 10000)
+          );
+          
+          const savePromise = SaveService.saveReview(payload);
+          
+          const result = await Promise.race([savePromise, timeoutPromise]);
+          console.log("Lưu lịch sử thành công!", result);
+          alert("Đã lưu kết quả vào lịch sử!");
+        }
         
       } catch (err) {
-        console.error("Không thể lưu lịch sử:", err);
-        alert("Có lỗi xảy ra khi lưu lịch sử. Vui lòng thử lại!");
-        return;
+        console.error("Lỗi khi lưu lịch sử:", err);
+        
+        // Hiển thị lỗi nhưng vẫn cho phép tiếp tục
+        let errorMessage = "Không thể lưu lịch sử.";
+        
+        if (err.message === "Request timeout") {
+          errorMessage = "Lưu lịch sử mất quá nhiều thời gian.";
+        } else if (err.response) {
+          errorMessage = `Lỗi server: ${err.response.status}`;
+        } else if (err.message) {
+          errorMessage = `Lỗi: ${err.message}`;
+        }
+        
+        alert(`${errorMessage}\nBạn vẫn có thể tiếp tục sử dụng ứng dụng.`);
       }
-    } else {
-      console.warn("Thiếu dữ liệu để lưu:", { 
-        hasReviewResult: !!reviewResult, 
-        hasCurrentUser: !!currentUser,
-        username: currentUser?.username
-      });
     }
 
-    // Sau khi lưu thành công, mới xóa dữ liệu và chuyển hướng
+    // Reset và chuyển trang (luôn luôn thực hiện)
     setCode("");
     setReviewResult(null);
     navigate("/editor", { replace: true });

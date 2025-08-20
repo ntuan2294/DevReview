@@ -22,9 +22,8 @@ public class ReviewHistoryService {
         return reviewHistoryRepository.save(history);
     }
 
+    // ✅ Sửa: sử dụng đúng method name
     public List<ReviewHistory> getHistory(String username) {
-        // dùng nested property
         return reviewHistoryRepository.findByUser_Username(username);
     }
-
 }

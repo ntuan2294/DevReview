@@ -8,6 +8,6 @@ import java.util.List;
 
 @Repository
 public interface ReviewHistoryRepository extends JpaRepository<ReviewHistory, Long> {
-    // lấy lịch sử theo username
-    List<ReviewHistory> findByUsername(String username);
+    // ✅ Sửa: sử dụng nested property để tìm theo username của User
+    List<ReviewHistory> findByUser_Username(String username);
 }
