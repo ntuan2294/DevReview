@@ -11,23 +11,155 @@ const CodeEditorPage = () => {
   const { code, setCode, language, setLanguage, setReviewResult } = useCode();
   const [isLoading, setIsLoading] = useState(false);
   const [historyItems, setHistoryItems] = useState([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(true);
+  const [lastRefreshTime, setLastRefreshTime] = useState(Date.now());
   const currentUser = AuthService.getCurrentUser();
 
-  // Load lịch sử khi component mount
-  useEffect(() => {
-    const fetchHistory = async () => {
-      try {
-        if (currentUser && currentUser.username) {
-          const response = await axios.get(`http://localhost:8000/api/history/${currentUser.username}`);
+  // ✅ Function để fetch lịch sử với force refresh option
+  const fetchHistory = async (forceRefresh = false) => {
+    try {
+      if (!forceRefresh && isLoadingHistory) return; // Prevent double loading
+      
+      if (forceRefresh || !isLoadingHistory) setIsLoadingHistory(true);
+      
+      if (currentUser && currentUser.username) {
+        console.log("🔄 Fetching lịch sử cho user:", currentUser.username);
+        console.log("🔄 Force refresh:", forceRefresh);
+        console.log("🔄 Timestamp:", new Date().toISOString());
+        
+        const response = await axios.get(`http://localhost:8000/api/history/${currentUser.username}`, {
+          timeout: 10000,
+          headers: {
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0',
+            // Add timestamp to prevent caching
+            'X-Requested-At': Date.now().toString()
+          }
+        });
+        
+        console.log("✅ Raw response data:", response.data);
+        console.log("📊 Records count:", response.data?.length || 0);
+        
+        // Log chi tiết từng record
+        if (response.data && Array.isArray(response.data)) {
+          response.data.forEach((item, index) => {
+            console.log(`📄 History record ${index + 1}:`, {
+              id: item.id,
+              userId: item.user?.id,
+              username: item.user?.username,
+              summary: item.reviewSummary ? item.reviewSummary.substring(0, 50) + "..." : "No summary",
+              createdAt: item.createdAt,
+              hasOriginalCode: !!item.originalCode,
+              hasFixedCode: !!item.fixedCode
+            });
+          });
+          
           setHistoryItems(response.data);
+          setLastRefreshTime(Date.now());
+          console.log("✅ State updated successfully");
+        } else {
+          console.warn("⚠️ Response data is not an array:", response.data);
+          setHistoryItems([]);
         }
-      } catch (error) {
-        console.error("Lỗi khi load lịch sử:", error);
+        
+        // Clear refresh flags
+        localStorage.removeItem('history_needs_refresh');
+        
+      } else {
+        console.warn("⚠️ No currentUser or username available");
+        setHistoryItems([]);
+      }
+    } catch (error) {
+      console.error("❌ Error fetching history:", error);
+      console.error("Error details:", {
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        message: error.message,
+        code: error.code
+      });
+      
+      // Don't reset historyItems on error, keep previous data
+      if (!historyItems.length) {
+        setHistoryItems([]);
+      }
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  };
+
+  // ✅ Load lịch sử khi component mount
+  useEffect(() => {
+    console.log("🚀 CodeEditorPage mounted, fetching history...");
+    fetchHistory(true); // Force refresh on mount
+  }, [currentUser?.username]); // Depend on username
+
+  // ✅ Listen cho custom event từ save action
+  useEffect(() => {
+    const handleHistoryUpdated = (event) => {
+      console.log("🔔 Received historyUpdated event:", event.detail);
+      // Delay một chút để đảm bảo DB đã commit
+      setTimeout(() => {
+        fetchHistory(true);
+      }, 1000);
+    };
+
+    window.addEventListener('historyUpdated', handleHistoryUpdated);
+    return () => window.removeEventListener('historyUpdated', handleHistoryUpdated);
+  }, []);
+
+  // ✅ Kiểm tra localStorage flag định kỳ
+  useEffect(() => {
+    const checkRefreshFlag = () => {
+      const needsRefresh = localStorage.getItem('history_needs_refresh');
+      const lastSaveTime = localStorage.getItem('last_save_time');
+      
+      if (needsRefresh === 'true' && lastSaveTime) {
+        const saveTime = parseInt(lastSaveTime);
+        const now = Date.now();
+        
+        // Nếu đã save trong vòng 30 giây gần đây thì refresh
+        if (now - saveTime < 30000) {
+          console.log("🔄 Flag detected, refreshing history...");
+          fetchHistory(true);
+        } else {
+          // Clear old flags
+          localStorage.removeItem('history_needs_refresh');
+          localStorage.removeItem('last_save_time');
+        }
       }
     };
-    
-    fetchHistory();
-  }, [currentUser]);
+
+    // Kiểm tra ngay khi mount
+    checkRefreshFlag();
+
+    // Kiểm tra định kỳ mỗi 3 giây
+    const interval = setInterval(checkRefreshFlag, 3000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // ✅ Listen cho window focus
+  useEffect(() => {
+    const handleWindowFocus = () => {
+      console.log("🔍 Window focused, checking for updates...");
+      const lastRefreshAge = Date.now() - lastRefreshTime;
+      
+      // Chỉ refresh nếu đã lâu không refresh (>10 giây)
+      if (lastRefreshAge > 10000) {
+        fetchHistory(true);
+      }
+    };
+
+    window.addEventListener('focus', handleWindowFocus);
+    return () => window.removeEventListener('focus', handleWindowFocus);
+  }, [lastRefreshTime]);
+
+  // ✅ Manual refresh button handler
+  const handleRefreshHistory = () => {
+    console.log("🔄 Manual refresh requested");
+    fetchHistory(true);
+  };
 
   const handleSubmit = async () => {
     if (!code.trim()) {
@@ -78,29 +210,89 @@ const CodeEditorPage = () => {
     navigate("/");
   };
 
-  // Xử lý click vào item lịch sử
+  // Tạo tóm tắt từ review summary
+  const createSummary = (reviewSummary) => {
+    if (!reviewSummary) return "Review không có tóm tắt";
+    
+    const cleanText = reviewSummary
+      .replace(/[#*`]/g, '')
+      .replace(/\n+/g, ' ')
+      .trim();
+    
+    const sentences = cleanText.split(/[.!?]+/);
+    const firstSentence = sentences[0]?.trim();
+    
+    if (firstSentence && firstSentence.length > 10) {
+      return firstSentence.length > 80 
+        ? `${firstSentence.substring(0, 77)}...`
+        : firstSentence;
+    }
+    
+    return cleanText.length > 80 
+      ? `${cleanText.substring(0, 77)}...`
+      : cleanText;
+  };
+
+  // Click vào history item
   const handleHistoryClick = async (historyId) => {
     try {
+      console.log(`🔍 Loading history detail for ID: ${historyId}`);
+      
       const response = await axios.get(`http://localhost:8000/api/history/detail/${historyId}`);
       const historyData = response.data;
       
-      // Set dữ liệu vào context để hiển thị ở CodeResultPage
-      setReviewResult({
-        feedback: historyData.reviewSummary,
-        improvedCode: historyData.fixedCode,
-        originalCode: historyData.originalCode
-      });
+      console.log("✅ Loaded history data:", historyData);
       
-      // Set code và language từ history (nếu có)
+      const reviewResult = {
+        feedback: historyData.reviewSummary || "Không có feedback",
+        improvedCode: historyData.fixedCode || "Không có code đã sửa",
+        originalCode: historyData.originalCode || "",
+        summary: createSummary(historyData.reviewSummary),
+        isFromHistory: true,
+        historyId: historyId
+      };
+      
+      setReviewResult(reviewResult);
       setCode(historyData.originalCode || "");
-      // Note: Nếu bạn lưu language trong DB, hãy thêm vào đây
       
-      // Điều hướng sang trang result
+      const detectedLanguage = detectLanguageFromCode(historyData.originalCode);
+      if (detectedLanguage) {
+        setLanguage(detectedLanguage);
+      }
+      
       navigate("/result");
     } catch (error) {
-      console.error("Lỗi khi load chi tiết lịch sử:", error);
-      alert("Không thể tải chi tiết lịch sử!");
+      console.error("❌ Error loading history detail:", error);
+      
+      let errorMessage = "Không thể tải chi tiết lịch sử!";
+      if (error.response?.status === 404) {
+        errorMessage = "Lịch sử review này không tồn tại!";
+      } else if (error.response?.status >= 500) {
+        errorMessage = "Lỗi server, vui lòng thử lại sau!";
+      }
+      
+      alert(errorMessage);
     }
+  };
+
+  const detectLanguageFromCode = (codeContent) => {
+    if (!codeContent) return null;
+    
+    const lowerCode = codeContent.toLowerCase();
+    
+    if (lowerCode.includes('def ') || lowerCode.includes('import ') || lowerCode.includes('print(')) {
+      return 'python';
+    } else if (lowerCode.includes('function') || lowerCode.includes('var ') || lowerCode.includes('let ') || lowerCode.includes('const ')) {
+      return 'javascript';
+    } else if (lowerCode.includes('public class') || lowerCode.includes('system.out.')) {
+      return 'java';
+    } else if (lowerCode.includes('#include') || lowerCode.includes('cout <<')) {
+      return 'cpp';
+    } else if (lowerCode.includes('using system') || lowerCode.includes('console.write')) {
+      return 'csharp';
+    }
+    
+    return null;
   };
 
   return (
@@ -134,34 +326,91 @@ const CodeEditorPage = () => {
           {/* Sidebar - Lịch sử */}
           <div className="col-span-1">
             <div className="bg-white rounded-xl shadow-md p-4">
-              <h3 className="text-lg font-semibold mb-4 text-gray-800">Lịch sử</h3>
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold text-gray-800">
+                  Lịch sử Review
+                  <span className="text-sm font-normal text-gray-500 ml-2">
+                    ({historyItems.length})
+                  </span>
+                </h3>
+                {/* Refresh button */}
+                <button
+                  onClick={handleRefreshHistory}
+                  disabled={isLoadingHistory}
+                  className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-50"
+                  title="Refresh lịch sử"
+                >
+                  <svg 
+                    className={`w-4 h-4 ${isLoadingHistory ? 'animate-spin' : ''}`} 
+                    fill="none" 
+                    stroke="currentColor" 
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                </button>
+              </div>
               
-              {historyItems.length > 0 ? (
-                <div className="space-y-2 max-h-96 overflow-y-auto">
-                  {historyItems.map((item) => (
+              {isLoadingHistory ? (
+                <div className="text-center text-gray-500 py-8">
+                  <div className="animate-spin w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-2"></div>
+                  <p className="text-sm">Đang tải lịch sử...</p>
+                </div>
+              ) : historyItems.length > 0 ? (
+                <div className="space-y-3 max-h-96 overflow-y-auto">
+                  {historyItems.map((item, index) => (
                     <div
-                      key={item.id}
+                      key={`${item.id}-${index}`}
                       onClick={() => handleHistoryClick(item.id)}
-                      className="p-3 border rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
+                      className="group p-3 border border-gray-200 rounded-lg hover:bg-blue-50 hover:border-blue-300 cursor-pointer transition-all duration-200"
                     >
-                      <div className="text-sm font-medium text-gray-800 truncate">
-                        {/* Hiển thị tên từ summary hoặc fallback */}
-                        {item.reviewSummary 
-                          ? (item.reviewSummary.length > 50 
-                              ? `${item.reviewSummary.substring(0, 50)}...` 
-                              : item.reviewSummary)
-                          : `Review code - ${new Date(item.createdAt).toLocaleDateString()}`
-                        }
+                      {/* Tóm tắt chính */}
+                      <div className="text-sm font-medium text-gray-800 mb-2">
+                        {createSummary(item.reviewSummary)}
                       </div>
-                      <div className="text-xs text-gray-500 mt-1">
-                        {new Date(item.createdAt).toLocaleDateString('vi-VN')}
+                      
+                      {/* Metadata */}
+                      <div className="flex justify-between items-center text-xs text-gray-500">
+                        <span className="bg-gray-100 px-2 py-1 rounded group-hover:bg-blue-100">
+                          ID: {item.id}
+                        </span>
+                        <span>
+                          {new Date(item.createdAt).toLocaleDateString('vi-VN', {
+                            day: '2-digit',
+                            month: '2-digit',
+                            year: '2-digit',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </span>
                       </div>
+                      
+                      {/* Code preview */}
+                      {item.originalCode && (
+                        <div className="mt-2 text-xs text-gray-400 font-mono bg-gray-50 p-1 rounded group-hover:bg-blue-50">
+                          {item.originalCode.length > 50 
+                            ? `${item.originalCode.substring(0, 47)}...` 
+                            : item.originalCode}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
               ) : (
                 <div className="text-center text-gray-500 py-8">
+                  <div className="w-16 h-16 mx-auto mb-4 bg-gray-100 rounded-full flex items-center justify-center">
+                    <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                  </div>
                   <p className="text-sm">Chưa có lịch sử review</p>
+                  <p className="text-xs mt-1">Hãy review code đầu tiên!</p>
+                  {/* Debug info */}
+                  <div className="mt-4 text-xs text-gray-400 space-y-1">
+                    <p>User: {currentUser?.username || 'null'}</p>
+                    <p>Loading: {isLoadingHistory ? 'Yes' : 'No'}</p>
+                    <p>Last refresh: {new Date(lastRefreshTime).toLocaleTimeString()}</p>
+                  </div>
                 </div>
               )}
             </div>
@@ -170,7 +419,6 @@ const CodeEditorPage = () => {
           {/* Main Editor */}
           <div className="col-span-3">
             <div className="bg-white rounded-xl shadow-md p-6">
-              {/* Language Selection */}
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Ngôn ngữ:
@@ -191,29 +439,27 @@ const CodeEditorPage = () => {
                 </select>
               </div>
 
-              {/* Code Editor */}
               <div className="mb-6">
                 <textarea
                   value={code}
                   onChange={(e) => setCode(e.target.value)}
-                  placeholder="Nhập code tại đây..."
+                  placeholder="Nhập code tại đây hoặc chọn từ lịch sử review..."
                   className="w-full h-96 p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm resize-none"
                   style={{ fontFamily: 'Monaco, Menlo, "Ubuntu Mono", consolas, "source-code-pro", monospace' }}
                 />
               </div>
 
-              {/* Action Buttons */}
               <div className="flex justify-between items-center">
                 <div className="flex space-x-3">
                   <button
                     onClick={handleClearCode}
                     className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
                   >
-                    Xóa
+                    🗑️ Xóa
                   </button>
                   
                   <label className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors cursor-pointer">
-                    📁 Gửi file
+                    📁 Tải file
                     <input
                       type="file"
                       onChange={handleFileUpload}
@@ -238,10 +484,10 @@ const CodeEditorPage = () => {
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                       </svg>
-                      Đang xử lý...
+                      Đang phân tích...
                     </span>
                   ) : (
-                    "⚠ Gửi"
+                    "🚀 Review Code"
                   )}
                 </button>
               </div>

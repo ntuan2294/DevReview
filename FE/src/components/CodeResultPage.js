@@ -1,17 +1,17 @@
+// CodeResultPage.js - Fix lịch sử không refresh
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { useCode } from "./CodeContext";
 import ReviewSection from "./ReviewSection";
 import AuthService from "../services/AuthService";
 import SaveService from "../services/SaveService";
-import axios from "axios"; // Thêm import axios
+import axios from "axios";
 
 const CodeResultPage = () => {
   const navigate = useNavigate();
   const { code, language, reviewResult, setCode, setReviewResult } = useCode();
   const currentUser = AuthService.getCurrentUser();
 
-  // Quay lại trang editor
   const handleBack = () => navigate("/editor");
   
   const handleNew = async () => {
@@ -19,9 +19,12 @@ const CodeResultPage = () => {
     console.log("Current user:", currentUser);
     console.log("Review result:", reviewResult);
 
-    // Hỏi user có muốn lưu không (nếu có dữ liệu)
-    const shouldSave = reviewResult && currentUser && currentUser.username && 
-                     window.confirm("Bạn có muốn lưu kết quả review này vào lịch sử không?");
+    // Hỏi user có muốn lưu không (nếu có dữ liệu và chưa phải từ history)
+    const shouldSave = reviewResult && 
+                      currentUser && 
+                      currentUser.username && 
+                      !reviewResult.isFromHistory && // Không lưu lại nếu đây là data từ history
+                      window.confirm("Bạn có muốn lưu kết quả review này vào lịch sử không?");
 
     if (shouldSave) {
       try {
@@ -34,32 +37,26 @@ const CodeResultPage = () => {
         } else {
           console.log("Lấy userId từ API cho username:", currentUser.username);
           try {
-            // Sử dụng axios thay vì fetch để consistent với các service khác
             const response = await axios.get(`http://localhost:8000/api/user/${currentUser.username}`, {
               timeout: 5000
             });
             userId = response.data.id;
             console.log("Đã lấy được userId:", userId);
+            
+            // Cập nhật currentUser với userId
+            const updatedUser = { ...currentUser, id: userId };
+            AuthService.setCurrentUser(updatedUser);
+            
           } catch (userError) {
             console.error("Không thể lấy userId:", userError);
-            
-            // Xử lý các loại lỗi khác nhau
-            let errorMessage = "Không thể kết nối với server";
-            
-            if (userError.code === 'ECONNREFUSED') {
-              errorMessage = "Backend server không chạy (port 8000)";
-            } else if (userError.response?.status === 404) {
-              errorMessage = `User '${currentUser.username}' không tồn tại trong hệ thống`;
-            } else if (userError.code === 'ECONNABORTED') {
-              errorMessage = "Kết nối bị timeout";
-            }
-            
-            alert(`${errorMessage}\nDữ liệu sẽ không được lưu.`);
-            // Vẫn cho phép tiếp tục mà không lưu
+            alert("Không thể lấy thông tin user. Vui lòng đăng nhập lại.");
+            AuthService.logout();
+            navigate("/");
+            return;
           }
         }
 
-        // Chỉ lưu nếu có userId
+        // Lưu vào CSDL
         if (userId) {
           const payload = {
             userId: userId,
@@ -71,33 +68,34 @@ const CodeResultPage = () => {
           
           console.log("Payload gửi đi:", JSON.stringify(payload, null, 2));
           
-          // Gửi request với timeout
-          const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error("Request timeout")), 10000)
-          );
+          const result = await SaveService.saveReview(payload);
+          console.log("✅ Lưu lịch sử thành công!", result);
           
-          const savePromise = SaveService.saveReview(payload);
+          // ✅ QUAN TRỌNG: Broadcast event để các component khác biết cần refresh
+          window.dispatchEvent(new CustomEvent('historyUpdated', {
+            detail: { newHistoryId: result.historyId, username: currentUser.username }
+          }));
           
-          const result = await Promise.race([savePromise, timeoutPromise]);
-          console.log("Lưu lịch sử thành công!", result);
-          alert("Đã lưu kết quả vào lịch sử!");
+          // ✅ Set flag để CodeEditorPage biết cần refresh
+          localStorage.setItem('history_needs_refresh', 'true');
+          localStorage.setItem('last_save_time', Date.now().toString());
+          
+          alert("✅ Đã lưu kết quả vào lịch sử!\n\nLịch sử sẽ được cập nhật khi bạn quay lại trang chủ.");
         }
         
       } catch (err) {
         console.error("Lỗi khi lưu lịch sử:", err);
         
-        // Hiển thị lỗi nhưng vẫn cho phép tiếp tục
         let errorMessage = "Không thể lưu lịch sử.";
-        
         if (err.message === "Request timeout") {
           errorMessage = "Lưu lịch sử mất quá nhiều thời gian.";
         } else if (err.response) {
-          errorMessage = `Lỗi server: ${err.response.status}`;
+          errorMessage = `Lỗi server: ${err.response.status} - ${err.response.data?.message || err.response.statusText}`;
         } else if (err.message) {
           errorMessage = `Lỗi: ${err.message}`;
         }
         
-        alert(`${errorMessage}\nBạn vẫn có thể tiếp tục sử dụng ứng dụng.`);
+        alert(`❌ ${errorMessage}\n\nVui lòng thử lại hoặc liên hệ hỗ trợ.`);
       }
     }
 
