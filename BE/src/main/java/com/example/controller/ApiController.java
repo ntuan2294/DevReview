@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api")
@@ -85,16 +86,14 @@ public class ApiController {
             // Thử lấy user bằng userId trước
             if (payload.containsKey("userId")) {
                 Long userId = ((Number) payload.get("userId")).longValue();
-                user = userRepository.findById(userId)
-                        .orElse(null);
+                user = userRepository.findById(userId).orElse(null);
                 System.out.println("Tìm user bằng ID: " + userId + " -> " + (user != null ? "Found" : "Not found"));
             }
 
             // Nếu không tìm thấy bằng userId, thử tìm bằng username
             if (user == null && payload.containsKey("username")) {
                 String username = (String) payload.get("username");
-                user = userRepository.findByUsername(username)
-                        .orElse(null);
+                user = userRepository.findByUsername(username).orElse(null);
                 System.out.println(
                         "Tìm user bằng username: " + username + " -> " + (user != null ? "Found" : "Not found"));
             }
@@ -110,13 +109,30 @@ public class ApiController {
             String reviewSummary = (String) payload.getOrDefault("reviewSummary", "");
             String fixedCode = (String) payload.getOrDefault("fixedCode", "");
 
+            // ✅ XỬ LÝ LANGUAGE CHÍNH XÁC HƠN
+            String language = "unknown"; // default
+
+            if (payload.containsKey("language")) {
+                Object langObj = payload.get("language");
+                if (langObj != null) {
+                    String langStr = langObj.toString().trim();
+                    if (!langStr.isEmpty() && !langStr.equals("undefined") && !langStr.equals("null")) {
+                        language = langStr.toLowerCase(); // Chuẩn hóa về lowercase
+                    }
+                }
+            }
+
             System.out.println("Đang lưu cho user: " + user.getUsername() + " (ID: " + user.getId() + ")");
+            System.out.println("FINAL Language: '" + language + "'"); // ✅ LOG CUỐI CÙNG
             System.out.println("Original code length: " + originalCode.length());
             System.out.println("Review summary length: " + reviewSummary.length());
             System.out.println("Fixed code length: " + fixedCode.length());
 
-            ReviewHistory savedHistory = reviewHistoryService.saveHistory(user, originalCode, reviewSummary, fixedCode);
-            System.out.println("Lưu thành công với ID: " + savedHistory.getId());
+            // ✅ CHẮC CHẮN GỌI METHOD CÓ LANGUAGE
+            ReviewHistory savedHistory = reviewHistoryService.saveHistory(user, originalCode, reviewSummary, fixedCode,
+                    language);
+            System.out.println("✅ Lưu thành công với ID: " + savedHistory.getId() + ", Language: '"
+                    + savedHistory.getLanguage() + "'");
 
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
@@ -136,7 +152,7 @@ public class ApiController {
         }
     }
 
-    // ✅ Cải thiện API lấy lịch sử - sắp xếp theo thời gian mới nhất
+    // ✅ FIX CIRCULAR REFERENCE - Manual Serialize
     @GetMapping("/history/{username}")
     @Transactional(readOnly = true)
     public ResponseEntity<?> getHistoryByUsername(@PathVariable String username) {
@@ -144,17 +160,29 @@ public class ApiController {
             System.out.println("Đang lấy lịch sử cho user: " + username);
 
             List<ReviewHistory> history = reviewHistoryService.getHistory(username);
-
-            // Log để debug
             System.out.println("Tìm thấy " + history.size() + " records cho user: " + username);
 
-            // Tạo response data với thông tin chi tiết hơn
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("count", history.size());
-            response.put("data", history);
+            // ✅ MANUAL SERIALIZE để tránh circular reference
+            List<Map<String, Object>> response = history.stream().map(h -> {
+                Map<String, Object> item = new HashMap<>();
+                item.put("id", h.getId());
+                item.put("originalCode", h.getOriginalCode());
+                item.put("reviewSummary", h.getReviewSummary());
+                item.put("fixedCode", h.getFixedCode());
+                item.put("language", h.getLanguage());
+                item.put("createdAt", h.getCreatedAt());
 
-            return ResponseEntity.ok(history); // Trả về trực tiếp list để frontend xử lý dễ hơn
+                // ✅ CHỈ LẤY THÔNG TIN CẦN THIẾT CỦA USER
+                if (h.getUser() != null) {
+                    item.put("user", Map.of(
+                            "id", h.getUser().getId(),
+                            "username", h.getUser().getUsername()));
+                }
+
+                return item;
+            }).collect(Collectors.toList());
+
+            return ResponseEntity.ok(response);
         } catch (Exception e) {
             System.err.println("Lỗi khi lấy lịch sử cho user " + username + ": " + e.getMessage());
             e.printStackTrace();
@@ -167,7 +195,7 @@ public class ApiController {
         }
     }
 
-    // ✅ Cải thiện API lấy chi tiết lịch sử
+    // ✅ FIX DETAIL API
     @GetMapping("/history/detail/{id}")
     @Transactional(readOnly = true)
     public ResponseEntity<?> getHistoryDetail(@PathVariable Long id) {
@@ -179,18 +207,22 @@ public class ApiController {
                         System.out
                                 .println("Tìm thấy lịch sử ID " + id + " cho user: " + history.getUser().getUsername());
 
-                        // Tạo response với thông tin đầy đủ
+                        // ✅ MANUAL SERIALIZE để tránh circular reference
                         Map<String, Object> response = new HashMap<>();
                         response.put("id", history.getId());
                         response.put("originalCode", history.getOriginalCode());
                         response.put("reviewSummary", history.getReviewSummary());
                         response.put("fixedCode", history.getFixedCode());
+                        response.put("language", history.getLanguage());
                         response.put("createdAt", history.getCreatedAt());
-                        response.put("user", Map.of(
-                                "id", history.getUser().getId(),
-                                "username", history.getUser().getUsername()));
 
-                        return ResponseEntity.ok(history); // Trả về object trực tiếp
+                        if (history.getUser() != null) {
+                            response.put("user", Map.of(
+                                    "id", history.getUser().getId(),
+                                    "username", history.getUser().getUsername()));
+                        }
+
+                        return ResponseEntity.ok(response);
                     })
                     .orElseGet(() -> {
                         System.out.println("Không tìm thấy lịch sử với ID: " + id);
@@ -210,13 +242,28 @@ public class ApiController {
 
     @GetMapping("/history/item/{id}")
     @Transactional(readOnly = true)
-    public ResponseEntity<ReviewHistory> getHistoryItem(@PathVariable Long id) {
+    public ResponseEntity<Map<String, Object>> getHistoryItem(@PathVariable Long id) {
         return reviewHistoryRepository.findById(id)
-                .map(ResponseEntity::ok)
+                .map(history -> {
+                    Map<String, Object> response = new HashMap<>();
+                    response.put("id", history.getId());
+                    response.put("originalCode", history.getOriginalCode());
+                    response.put("reviewSummary", history.getReviewSummary());
+                    response.put("fixedCode", history.getFixedCode());
+                    response.put("language", history.getLanguage());
+                    response.put("createdAt", history.getCreatedAt());
+
+                    if (history.getUser() != null) {
+                        response.put("user", Map.of(
+                                "id", history.getUser().getId(),
+                                "username", history.getUser().getUsername()));
+                    }
+
+                    return ResponseEntity.ok(response);
+                })
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    // ✅ Cải thiện API lấy user info
     @GetMapping("/user/{username}")
     @Transactional(readOnly = true)
     public ResponseEntity<?> getUserByUsername(@PathVariable String username) {
@@ -231,7 +278,6 @@ public class ApiController {
                         response.put("success", true);
                         response.put("id", user.getId());
                         response.put("username", user.getUsername());
-                        // Không trả về password vì lý do bảo mật
 
                         return ResponseEntity.ok(response);
                     })
@@ -256,14 +302,12 @@ public class ApiController {
         }
     }
 
-    // ✅ THÊM: API xóa lịch sử review (nếu cần)
     @DeleteMapping("/history/{id}")
     @Transactional
     public ResponseEntity<?> deleteHistory(@PathVariable Long id, @RequestParam String username) {
         try {
             return reviewHistoryRepository.findById(id)
                     .map(history -> {
-                        // Kiểm tra quyền sở hữu
                         if (!history.getUser().getUsername().equals(username)) {
                             Map<String, Object> errorResponse = new HashMap<>();
                             errorResponse.put("success", false);
@@ -295,6 +339,44 @@ public class ApiController {
             errorResponse.put("message", "Lỗi khi xóa lịch sử: " + e.getMessage());
 
             return ResponseEntity.status(500).body(errorResponse);
+        }
+    }
+
+    // ✅ THÊM ENDPOINT DEBUG
+    @GetMapping("/debug/history/{username}")
+    public ResponseEntity<?> debugHistory(@PathVariable String username) {
+        try {
+            // 1. Check user exists
+            java.util.Optional<User> userOpt = userRepository.findByUsername(username);
+            if (!userOpt.isPresent()) {
+                return ResponseEntity.ok(Map.of("error", "User not found", "username", username));
+            }
+
+            User user = userOpt.get();
+
+            // 2. Get history directly
+            List<ReviewHistory> history = reviewHistoryRepository.findByUser_Username(username);
+
+            // 3. Create simple response without circular reference
+            List<Map<String, Object>> simplified = history.stream().map(h -> {
+                Map<String, Object> item = new HashMap<>();
+                item.put("id", h.getId());
+                item.put("language", h.getLanguage());
+                item.put("createdAt", h.getCreatedAt());
+                item.put("hasOriginalCode", h.getOriginalCode() != null);
+                item.put("hasReviewSummary", h.getReviewSummary() != null);
+                item.put("originalCodeLength", h.getOriginalCode() != null ? h.getOriginalCode().length() : 0);
+                return item;
+            }).collect(Collectors.toList());
+
+            return ResponseEntity.ok(Map.of(
+                    "username", username,
+                    "userId", user.getId(),
+                    "historyCount", history.size(),
+                    "histories", simplified));
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.ok(Map.of("error", e.getMessage()));
         }
     }
 }

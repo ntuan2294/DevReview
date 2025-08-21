@@ -14,13 +14,43 @@ public class ReviewHistoryService {
     @Autowired
     private ReviewHistoryRepository reviewHistoryRepository;
 
+    // ✅ Method cũ - giữ cho backward compatibility (không có language)
     public ReviewHistory saveHistory(User user, String originalCode, String reviewSummary, String fixedCode) {
+        return saveHistory(user, originalCode, reviewSummary, fixedCode, "unknown");
+    }
+
+    // Trong ReviewHistoryService.java
+
+    public ReviewHistory saveHistory(User user, String originalCode, String reviewSummary, String fixedCode,
+            String language) {
+        System.out.println("=== SAVE HISTORY DEBUG ===");
+        System.out.println("User: " + user.getUsername());
+        System.out.println("Language parameter: '" + language + "'");
+
         ReviewHistory history = new ReviewHistory();
         history.setUser(user);
         history.setOriginalCode(originalCode);
         history.setReviewSummary(reviewSummary);
         history.setFixedCode(fixedCode);
-        return reviewHistoryRepository.save(history);
+
+        // ✅ FORCE SET LANGUAGE
+        String finalLanguage = (language != null && !language.trim().isEmpty()) ? language.trim() : "unknown";
+        history.setLanguage(finalLanguage);
+
+        System.out.println("Before save - Language set to: '" + history.getLanguage() + "'");
+
+        ReviewHistory saved = reviewHistoryRepository.save(history);
+
+        System.out.println("After save - Saved ID: " + saved.getId());
+        System.out.println("After save - Language in entity: '" + saved.getLanguage() + "'");
+
+        // ✅ VERIFY BẰNG DATABASE QUERY
+        ReviewHistory verified = reviewHistoryRepository.findById(saved.getId()).orElse(null);
+        if (verified != null) {
+            System.out.println("Verified from DB - Language: '" + verified.getLanguage() + "'");
+        }
+
+        return saved;
     }
 
     // ✅ Cải thiện: sắp xếp lịch sử theo thời gian mới nhất trước
@@ -59,43 +89,6 @@ public class ReviewHistoryService {
             reviewHistoryRepository.deleteAll(toDelete);
             System.out.println("Đã xóa " + toDelete.size() + " lịch sử cũ cho user: " + username);
         }
-    }
-
-    // ✅ THÊM: Method tạo summary ngắn gọn từ reviewSummary
-    public String createShortSummary(String fullSummary) {
-        if (fullSummary == null || fullSummary.trim().isEmpty()) {
-            return "Review không có tóm tắt";
-        }
-
-        String cleaned = fullSummary
-                .replaceAll("[#*`]", "") // Loại bỏ markdown
-                .replaceAll("\\n+", " ") // Thay newlines bằng space
-                .trim();
-
-        // Lấy câu đầu tiên
-        String[] sentences = cleaned.split("[.!?]+");
-        if (sentences.length > 0 && sentences[0].trim().length() > 10) {
-            String firstSentence = sentences[0].trim();
-            return firstSentence.length() > 80
-                    ? firstSentence.substring(0, 77) + "..."
-                    : firstSentence;
-        }
-
-        // Fallback: lấy 80 ký tự đầu
-        return cleaned.length() > 80
-                ? cleaned.substring(0, 77) + "..."
-                : cleaned;
-    }
-
-    public ReviewHistory saveHistory(User user, String originalCode, String reviewSummary, String fixedCode,
-            String language) {
-        ReviewHistory history = new ReviewHistory();
-        history.setUser(user);
-        history.setOriginalCode(originalCode);
-        history.setReviewSummary(reviewSummary);
-        history.setFixedCode(fixedCode);
-        history.setLanguage(language); // Thêm dòng này
-        return reviewHistoryRepository.save(history);
     }
 
     // Method để tạo display name theo yêu cầu

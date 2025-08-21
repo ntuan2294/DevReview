@@ -18,6 +18,7 @@ const CodeResultPage = () => {
     console.log("=== BẮT ĐẦU HANDLE NEW ===");
     console.log("Current user:", currentUser);
     console.log("Review result:", reviewResult);
+    console.log("Language:", language); // ✅ THÊM LOG
 
     // Hỏi user có muốn lưu không (nếu có dữ liệu và chưa phải từ history)
     const shouldSave = reviewResult && 
@@ -55,40 +56,32 @@ const CodeResultPage = () => {
             return;
           }
         }
+
+        // ✅ THÊM LANGUAGE VÀO PAYLOAD
         const payload = {
-        userId: userId,
-        username: currentUser.username,
-        originalCode: code || "",
-        reviewSummary: reviewResult.feedback || reviewResult.summary || "",
-        fixedCode: reviewResult.improvedCode || reviewResult.fixedCode || "",
-        language: language || "unknown" // Thêm dòng này
-      };
-        // Lưu vào CSDL
-        if (userId) {
-          const payload = {
-            userId: userId,
-            username: currentUser.username,
-            originalCode: code || "",
-            reviewSummary: reviewResult.feedback || reviewResult.summary || "",
-            fixedCode: reviewResult.improvedCode || reviewResult.fixedCode || ""
-          };
-          
-          console.log("Payload gửi đi:", JSON.stringify(payload, null, 2));
-          
-          const result = await SaveService.saveReview(payload);
-          console.log("✅ Lưu lịch sử thành công!", result);
-          
-          // ✅ QUAN TRỌNG: Broadcast event để các component khác biết cần refresh
-          window.dispatchEvent(new CustomEvent('historyUpdated', {
-            detail: { newHistoryId: result.historyId, username: currentUser.username }
-          }));
-          
-          // ✅ Set flag để CodeEditorPage biết cần refresh
-          localStorage.setItem('history_needs_refresh', 'true');
-          localStorage.setItem('last_save_time', Date.now().toString());
-          
-          alert("✅ Đã lưu kết quả vào lịch sử!\n\nLịch sử sẽ được cập nhật khi bạn quay lại trang chủ.");
-        }
+          userId: userId,
+          username: currentUser.username,
+          originalCode: code || "",
+          reviewSummary: reviewResult.feedback || reviewResult.summary || "",
+          fixedCode: reviewResult.improvedCode || reviewResult.fixedCode || "",
+          language: language || "unknown" // ✅ THÊM DÒNG NÀY
+        };
+        
+        console.log("Payload gửi đi:", JSON.stringify(payload, null, 2));
+        
+        const result = await SaveService.saveReview(payload);
+        console.log("✅ Lưu lịch sử thành công!", result);
+        
+        // ✅ QUAN TRỌNG: Broadcast event để các component khác biết cần refresh
+        window.dispatchEvent(new CustomEvent('historyUpdated', {
+          detail: { newHistoryId: result.historyId, username: currentUser.username }
+        }));
+        
+        // ✅ Set flag để CodeEditorPage biết cần refresh
+        localStorage.setItem('history_needs_refresh', 'true');
+        localStorage.setItem('last_save_time', Date.now().toString());
+        
+        alert("✅ Đã lưu kết quả vào lịch sử!\n\nLịch sử sẽ được cập nhật khi bạn quay lại trang chủ.");
         
       } catch (err) {
         console.error("Lỗi khi lưu lịch sử:", err);

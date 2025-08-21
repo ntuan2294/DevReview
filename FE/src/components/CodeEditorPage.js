@@ -392,7 +392,7 @@ const CodeEditorPage = () => {
                         {createHistoryTitle(item)}
                       </div>
                       
-                      {/* Thông tin ngày tạo */}
+                      {/* Thông tin ngày tạo
                       <div className="text-xs text-gray-500 mb-2">
                         {new Date(item.createdAt).toLocaleDateString('vi-VN', {
                           day: '2-digit',
@@ -401,7 +401,7 @@ const CodeEditorPage = () => {
                           hour: '2-digit',
                           minute: '2-digit'
                         })}
-                      </div>
+                      </div> */}
                       
                       {/* Code preview */}
                       {item.originalCode && (

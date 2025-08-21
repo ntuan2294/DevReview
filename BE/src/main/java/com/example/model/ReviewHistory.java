@@ -12,10 +12,9 @@ public class ReviewHistory {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    // ✅ THÊM: @JsonIgnoreProperties để chỉ serialize những field cần thiết
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
-    @JsonIgnoreProperties({ "reviewHistories", "password" }) // ⭐ Bỏ qua circular ref và password
+    @JsonIgnoreProperties({ "reviewHistories", "password" })
     private User user;
 
     @Column(name = "original_code", columnDefinition = "TEXT")
@@ -27,16 +26,35 @@ public class ReviewHistory {
     @Column(name = "fixed_code", columnDefinition = "TEXT")
     private String fixedCode;
 
+    @Column(name = "language", length = 50)
+    private String language;
+
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
-    // Tự động set thời gian khi tạo mới
     @PrePersist
     protected void onCreate() {
         this.createdAt = LocalDateTime.now();
+        // Đảm bảo language không null
+        if (this.language == null) {
+            this.language = "unknown";
+        }
     }
 
-    // === GETTER & SETTER ===
+    // === CONSTRUCTORS ===
+    public ReviewHistory() {
+    }
+
+    public ReviewHistory(User user, String originalCode, String reviewSummary, String fixedCode, String language) {
+        this.user = user;
+        this.originalCode = originalCode;
+        this.reviewSummary = reviewSummary;
+        this.fixedCode = fixedCode;
+        this.language = language != null ? language : "unknown";
+        this.createdAt = LocalDateTime.now();
+    }
+
+    // === GETTERS & SETTERS ===
     public Long getId() {
         return id;
     }
@@ -77,6 +95,14 @@ public class ReviewHistory {
         this.fixedCode = fixedCode;
     }
 
+    public String getLanguage() {
+        return language;
+    }
+
+    public void setLanguage(String language) {
+        this.language = language != null ? language : "unknown";
+    }
+
     public LocalDateTime getCreatedAt() {
         return createdAt;
     }
@@ -85,15 +111,14 @@ public class ReviewHistory {
         this.createdAt = createdAt;
     }
 
-    @Column(name = "language")
-    private String language; // Thêm field này
-
-    // Getter và Setter cho language
-    public String getLanguage() {
-        return language;
-    }
-
-    public void setLanguage(String language) {
-        this.language = language;
+    // === UTILITY METHODS ===
+    @Override
+    public String toString() {
+        return "ReviewHistory{" +
+                "id=" + id +
+                ", language='" + language + '\'' +
+                ", createdAt=" + createdAt +
+                ", userId=" + (user != null ? user.getId() : null) +
+                '}';
     }
 }
