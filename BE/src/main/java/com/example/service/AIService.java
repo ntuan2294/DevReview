@@ -19,7 +19,7 @@ import java.util.regex.Pattern;
 public class AIService {
 
   // Nên load từ biến môi trường thay vì hardcode
-  private static final String API_KEY = "AIzaSyAMU4ChLP876TnowgNxEXy6EfkAK7Q1YKU";
+  private static final String API_KEY = "AIzaSyAcfZKJCZpQZZIA7sVjHl-ss5apA8J083Y";
   private static final String BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models/";
   private static final String MODEL = "gemini-2.0-flash";
   private static final String GENERATE_CONTENT_ENDPOINT = ":generateContent?key=";
@@ -75,8 +75,7 @@ public class AIService {
             + "1. Liệt kê lỗi logic (nếu có, nếu không ghi 'Không có lỗi logic').\n"
             + "2. Cảnh báo phong cách lập trình (nếu không có ghi 'Không có vấn đề về phong cách').\n"
             + "3. Gợi ý cải thiện.\n"
-            + "4. Viết lại code đã cải thiện, đặt trong code block markdown đúng chuẩn:\n```%s\n[your code here]\n```\n"
-            + "5. Tóm tắt ngắn gọn kết quả review (1-2 câu).\n\n"
+            + "Viết lại code đã cải thiện mà không cần in đoạn code đã cải thiện, đặt trong code block markdown đúng chuẩn:\n```%s\n[your code here]\n```\n"
             + "Đây là đoạn code:\n%s",
         language.toUpperCase(), language.toLowerCase(), safeCode);
   }

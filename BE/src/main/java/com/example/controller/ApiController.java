@@ -7,6 +7,7 @@ import com.example.repository.UserRepository;
 import com.example.model.ReviewHistory;
 import com.example.model.ReviewRequest;
 import com.example.service.AIService;
+import com.example.service.ExplainService;
 import com.example.service.ReviewHistoryService;
 import com.example.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -37,6 +38,9 @@ public class ApiController {
 
     @Autowired
     private ReviewHistoryRepository reviewHistoryRepository;
+
+    @Autowired
+    private ExplainService explainService;
 
     @PostMapping("/login")
     public Map<String, Object> login(@RequestBody UserRequest req) {
@@ -71,6 +75,15 @@ public class ApiController {
         System.out.println("Language: " + req.getLanguage());
         System.out.println("Code: " + req.getCode());
         Map<String, Object> result = aiService.reviewCode(req.getLanguage(), req.getCode());
+        System.out.println("Result: " + result);
+        return result;
+    }
+
+    @PostMapping("/explain")
+    public Map<String, Object> explain(@RequestBody ReviewRequest req) {
+        System.out.println("Language: " + req.getLanguage());
+        System.out.println("Code: " + req.getCode());
+        Map<String, Object> result = explainService.explainCode(req.getLanguage(), req.getCode());
         System.out.println("Result: " + result);
         return result;
     }

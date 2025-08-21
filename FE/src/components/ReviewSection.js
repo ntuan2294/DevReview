@@ -191,26 +191,6 @@ const ReviewSection = ({ code, language, reviewResult, fixedCode, currentUser, o
               </div>
             )}
           </div>
-          
-          {/* Footer với thống kê */}
-          {reviewResult && (
-            <div className="mt-4 pt-4 border-t border-gray-200">
-              <div className="grid grid-cols-2 gap-4 text-sm text-gray-600">
-                <div className="text-center">
-                  <div className="font-medium text-blue-600">
-                    {getOriginalCode().split('\n').length}
-                  </div>
-                  <div>Dòng code gốc</div>
-                </div>
-                <div className="text-center">
-                  <div className="font-medium text-green-600">
-                    {getImprovedCode().split('\n').length}
-                  </div>
-                  <div>Dòng code cải thiện</div>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </div>
