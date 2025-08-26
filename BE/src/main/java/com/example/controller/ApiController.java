@@ -10,6 +10,7 @@ import com.example.service.AIService;
 import com.example.service.ExplainService;
 import com.example.service.ReviewHistoryService;
 import com.example.service.UserService;
+import com.example.service.SuggestNameService; // ✅ THÊM import này
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -41,6 +42,9 @@ public class ApiController {
 
     @Autowired
     private ExplainService explainService;
+
+    @Autowired
+    private SuggestNameService suggestNameService; // ✅ THÊM autowired này
 
     @PostMapping("/login")
     public Map<String, Object> login(@RequestBody UserRequest req) {
@@ -86,6 +90,52 @@ public class ApiController {
         Map<String, Object> result = explainService.explainCode(req.getLanguage(), req.getCode());
         System.out.println("Result: " + result);
         return result;
+    }
+
+    // ✅ THÊM suggest endpoint
+    @PostMapping("/suggest")
+    public ResponseEntity<Map<String, Object>> suggestNames(@RequestBody ReviewRequest req) {
+        try {
+            System.out.println("=== SUGGEST API CALLED ===");
+            System.out.println("Language: " + req.getLanguage());
+            System.out.println("Code length: " + (req.getCode() != null ? req.getCode().length() : 0));
+            System.out.println("User: " + req.getUser());
+
+            // ✅ Validation
+            if (req.getCode() == null || req.getCode().trim().isEmpty()) {
+                Map<String, Object> errorResponse = new HashMap<>();
+                errorResponse.put("success", false);
+                errorResponse.put("message", "Code không được để trống");
+                return ResponseEntity.badRequest().body(errorResponse);
+            }
+
+            if (req.getLanguage() == null || req.getLanguage().trim().isEmpty()) {
+                Map<String, Object> errorResponse = new HashMap<>();
+                errorResponse.put("success", false);
+                errorResponse.put("message", "Language không được để trống");
+                return ResponseEntity.badRequest().body(errorResponse);
+            }
+
+            // ✅ Gọi service
+            Map<String, Object> result = suggestNameService.suggestNames(req.getLanguage(), req.getCode());
+            System.out.println("Suggest result keys: " + result.keySet());
+
+            // ✅ Đảm bảo có success field
+            result.put("success", true);
+
+            return ResponseEntity.ok(result);
+
+        } catch (Exception e) {
+            System.err.println("❌ Error in suggest endpoint: " + e.getMessage());
+            e.printStackTrace();
+
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("success", false);
+            errorResponse.put("message", "Lỗi khi gợi ý tên: " + e.getMessage());
+            errorResponse.put("error", e.getClass().getSimpleName());
+
+            return ResponseEntity.status(500).body(errorResponse);
+        }
     }
 
     @PostMapping("/history/save")

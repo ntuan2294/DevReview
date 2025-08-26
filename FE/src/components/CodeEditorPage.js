@@ -27,8 +27,10 @@ const CodeEditorPage = () => {
   const fetchHistory = useCallback(
     async (forceRefresh = false) => {
       try {
+        // Chặn gọi lại khi đang loading (trừ khi forceRefresh = true)
         if (!forceRefresh && isLoadingHistory) return;
-        if (forceRefresh || !isLoadingHistory) setIsLoadingHistory(true);
+
+        setIsLoadingHistory(true); // <-- chỉ gọi 1 lần ở đây
 
         if (currentUser && currentUser.username) {
           const response = await axios.get(
@@ -61,10 +63,10 @@ const CodeEditorPage = () => {
           setHistoryItems([]);
         }
       } finally {
-        setIsLoadingHistory(false);
+        setIsLoadingHistory(false); // luôn reset về false sau khi fetch xong
       }
     },
-    [currentUser?.username, isLoadingHistory, historyItems.length]
+    [currentUser?.username, historyItems.length] // ⚠️ bỏ isLoadingHistory khỏi dependency
   );
 
   // ✅ Load lịch sử khi component mount
@@ -295,7 +297,7 @@ const CodeEditorPage = () => {
           <div className="col-span-1 bg-white rounded-xl shadow-md p-4">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-semibold text-gray-800">
-                Lịch sử Review
+                Lịch sử
                 <span className="text-sm font-normal text-gray-500 ml-2">
                   ({filteredAndSearchedHistory.length}/{historyItems.length})
                 </span>

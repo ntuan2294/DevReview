@@ -15,13 +15,22 @@ public class User {
     @Column(unique = true)
     private String username;
 
+    @JsonIgnore // ⚠️ QUAN TRỌNG: Luôn ẩn password
     private String password;
 
-    // ✅ THÊM: Relationship với ReviewHistory + @JsonIgnore để tránh circular
-    // reference
+    // ✅ THÊM @JsonIgnore để tránh circular reference
     @OneToMany(mappedBy = "user", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
-    @JsonIgnore // ⭐ QUAN TRỌNG: Tránh serialize relationship này
+    @JsonIgnore
     private List<ReviewHistory> reviewHistories;
+
+    // Constructors
+    public User() {
+    }
+
+    public User(String username, String password) {
+        this.username = username;
+        this.password = password;
+    }
 
     // Getters & Setters
     public Long getId() {
@@ -54,5 +63,14 @@ public class User {
 
     public void setReviewHistories(List<ReviewHistory> reviewHistories) {
         this.reviewHistories = reviewHistories;
+    }
+
+    // ✅ toString() method tránh circular reference
+    @Override
+    public String toString() {
+        return "User{" +
+                "id=" + id +
+                ", username='" + username + '\'' +
+                '}';
     }
 }

@@ -1,9 +1,9 @@
 import { useNavigate } from "react-router-dom";
 import { useCode } from "./CodeContext";
-import ExplainSection from "./ExplainSection";
+import SuggestSection from "./SuggestSection"; // ✅ Chính xác
 import AuthService from "../services/AuthService";
 import SaveService from "../services/SaveService";
-import ExplainService from "../services/ExplainService";
+import SuggestNameService from "../services/SuggestNameService";
 import axios from "axios";
 
 const SuggestNamePage = () => {
@@ -19,11 +19,15 @@ const SuggestNamePage = () => {
       currentUser &&
       currentUser.username &&
       !reviewResult?.isFromHistory &&
-      window.confirm("Bạn có muốn lưu kết quả explain này vào lịch sử không?");
+      window.confirm(
+        "Bạn có muốn lưu kết quả gợi ý tên này vào lịch sử không?"
+      );
 
     if (shouldSave) {
       try {
         let userId = currentUser.id;
+
+        // ✅ Lấy userId nếu chưa có
         if (!userId) {
           try {
             const response = await axios.get(
@@ -34,6 +38,7 @@ const SuggestNamePage = () => {
             const updatedUser = { ...currentUser, id: userId };
             AuthService.setCurrentUser(updatedUser);
           } catch (err) {
+            console.error("❌ Không thể lấy userId:", err);
             alert("Không thể lấy thông tin user. Vui lòng đăng nhập lại.");
             AuthService.logout();
             navigate("/");
@@ -41,34 +46,51 @@ const SuggestNamePage = () => {
           }
         }
 
-        // ✅ Gọi ExplainService để lấy giải thích
-        let explanationText = "";
+        // ✅ Gọi SuggestNameService để lấy gợi ý
+        let suggestionText = "";
         try {
-          const explainResult = await ExplainService.explainCode(
+          console.log("🔄 Gọi SuggestNameService để lưu...");
+          const suggestResult = await SuggestNameService.suggestNames(
             language,
             code,
             currentUser.username
           );
-          explanationText = explainResult.explanation || "";
+
+          // ✅ Lấy suggestions từ response
+          suggestionText =
+            suggestResult.suggestions ||
+            suggestResult.explanation ||
+            suggestResult.feedback ||
+            "Không có gợi ý tên.";
+
+          console.log(
+            "✅ Lấy được suggestions:",
+            suggestionText.substring(0, 100) + "..."
+          );
         } catch (err) {
-          console.error("❌ Lỗi khi gọi ExplainService:", err);
-          explanationText = "⚠ Không thể lấy giải thích.";
+          console.error("❌ Lỗi khi gọi SuggestNameService:", err);
+          suggestionText = `⚠ Lỗi khi lấy gợi ý: ${err.message}`;
         }
 
-        // ✅ Payload: feedback = explain, fixedCode = null
+        // ✅ Payload để lưu vào database
         const payload = {
           userId,
           username: currentUser.username,
           originalCode: code || "",
-          reviewSummary: explanationText, // ⚡ lưu vào feedback (BE mapping)
-          fixedCode: null, // ⚡ bỏ code sửa
+          reviewSummary: suggestionText, // ⚡ lưu gợi ý vào reviewSummary
+          fixedCode: null, // ⚡ suggest không có fixed code
           language: language || "unknown",
         };
 
-        console.log("Payload gửi đi:", JSON.stringify(payload, null, 2));
+        console.log("📦 Payload để lưu:", {
+          ...payload,
+          reviewSummary: payload.reviewSummary.substring(0, 100) + "...", // log ngắn gọn
+        });
+
         const result = await SaveService.saveReview(payload);
         console.log("✅ Lưu lịch sử thành công!", result);
 
+        // ✅ Dispatch event để update history
         window.dispatchEvent(
           new CustomEvent("historyUpdated", {
             detail: {
@@ -78,17 +100,28 @@ const SuggestNamePage = () => {
           })
         );
 
+        // ✅ Set flag để CodeEditorPage refresh
         localStorage.setItem("history_needs_refresh", "true");
         localStorage.setItem("last_save_time", Date.now().toString());
 
-        alert("✅ Đã lưu kết quả explain vào lịch sử!");
+        alert("✅ Đã lưu kết quả gợi ý tên vào lịch sử!");
       } catch (err) {
-        console.error("Lỗi khi lưu lịch sử:", err);
-        alert("❌ Không thể lưu lịch sử. Vui lòng thử lại.");
+        console.error("❌ Lỗi khi lưu lịch sử:", err);
+
+        let errorMessage = "Không thể lưu lịch sử.";
+        if (err.response) {
+          errorMessage = `Lỗi server: ${err.response.status} - ${
+            err.response.data?.message || err.response.statusText
+          }`;
+        } else if (err.message) {
+          errorMessage = `Lỗi: ${err.message}`;
+        }
+
+        alert(`❌ ${errorMessage}\n\nVui lòng thử lại sau.`);
       }
     }
 
-    // ✅ reset sau khi lưu
+    // ✅ Reset và navigate về editor
     setCode("");
     setReviewResult(null);
     navigate("/editor", { replace: true });
@@ -100,11 +133,13 @@ const SuggestNamePage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-100 to-purple-200">
+    <div className="min-h-screen bg-gradient-to-br from-orange-100 to-yellow-200">
+      {" "}
+      {/* ✅ Màu khác với explain */}
       <header className="bg-transparent shadow-none border-none">
         <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
           <h1
-            className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-700 via-purple-700 to-pink-600 drop-shadow-md tracking-wide"
+            className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-orange-700 via-yellow-700 to-red-600 drop-shadow-md tracking-wide"
             style={{ fontFamily: '"Orbitron", sans-serif' }}
           >
             DEVREVIEW
@@ -123,8 +158,8 @@ const SuggestNamePage = () => {
           </div>
         </div>
       </header>
-
-      <ExplainSection
+      {/* ✅ Sử dụng SuggestSection */}
+      <SuggestSection
         code={code}
         language={language}
         reviewResult={reviewResult}

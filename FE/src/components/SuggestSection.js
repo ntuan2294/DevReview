@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
-import ExplainService from "../services/ExplainService";
+import SuggestNameService from "../services/SuggestNameService";
 
 const SuggestSection = ({ code, language, currentUser, onBack, onNew }) => {
-  const [explanation, setExplanation] = useState(null);
+  const [suggestions, setSuggestions] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   // Render code with line numbers
   const renderCodeWithLineNumbers = (codeContent) => {
@@ -27,8 +28,8 @@ const SuggestSection = ({ code, language, currentUser, onBack, onNew }) => {
     );
   };
 
-  // Format explanation
-  const formatExplanation = (text) => {
+  // Format suggestions với style riêng cho suggest
+  const formatSuggestions = (text) => {
     if (!text) return "Đang xử lý...";
     return (
       <div className="prose prose-sm max-w-none text-gray-800">
@@ -36,28 +37,40 @@ const SuggestSection = ({ code, language, currentUser, onBack, onNew }) => {
           components={{
             code: ({ inline, children, ...props }) =>
               !inline ? (
-                <pre className="bg-gray-900 text-green-400 p-3 rounded-lg overflow-x-auto shadow-inner">
+                <pre className="bg-orange-900 text-orange-200 p-3 rounded-lg overflow-x-auto shadow-inner">
                   <code {...props}>{children}</code>
                 </pre>
               ) : (
-                <code className="bg-gray-200 px-1 py-0.5 rounded text-sm">
+                <code className="bg-orange-200 text-orange-900 px-1 py-0.5 rounded text-sm">
                   {children}
                 </code>
               ),
             h1: ({ children }) => (
-              <h1 className="text-xl font-bold mb-3 text-blue-700">
+              <h1 className="text-xl font-bold mb-3 text-orange-700">
                 {children}
               </h1>
             ),
             h2: ({ children }) => (
-              <h2 className="text-lg font-semibold mb-2 text-blue-600">
+              <h2 className="text-lg font-semibold mb-2 text-orange-600">
                 {children}
               </h2>
             ),
             h3: ({ children }) => (
-              <h3 className="text-md font-medium mb-2 text-blue-500">
+              <h3 className="text-md font-medium mb-2 text-orange-500">
                 {children}
               </h3>
+            ),
+            ul: ({ children }) => (
+              <ul className="list-disc ml-4 mb-3 space-y-1">{children}</ul>
+            ),
+            ol: ({ children }) => (
+              <ol className="list-decimal ml-4 mb-3 space-y-1">{children}</ol>
+            ),
+            li: ({ children }) => <li className="text-gray-700">{children}</li>,
+            strong: ({ children }) => (
+              <strong className="font-semibold text-orange-800">
+                {children}
+              </strong>
             ),
           }}
         >
@@ -67,31 +80,93 @@ const SuggestSection = ({ code, language, currentUser, onBack, onNew }) => {
     );
   };
 
-  // Call Explain API khi code thay đổi
+  // ✅ Gọi SuggestName API khi code thay đổi
   useEffect(() => {
-    const fetchExplanation = async () => {
-      if (!code || !language) {
-        setExplanation("⚠ Không có code để giải thích.");
+    const fetchSuggestions = async () => {
+      if (!code || !code.trim()) {
+        setSuggestions("⚠️ Không có code để gợi ý tên.");
         setLoading(false);
+        setError(null);
         return;
       }
+
+      if (!language) {
+        setSuggestions("⚠️ Vui lòng chọn ngôn ngữ lập trình.");
+        setLoading(false);
+        setError(null);
+        return;
+      }
+
+      console.log("🔄 Bắt đầu gọi SuggestName API...");
       setLoading(true);
+      setError(null);
+
       try {
-        const result = await ExplainService.explainCode(
+        const result = await SuggestNameService.suggestNames(
           language,
           code,
-          currentUser?.username
+          currentUser?.username || "anonymous"
         );
-        setExplanation(result.explanation);
+
+        console.log("📦 Kết quả từ API:", result);
+
+        // ✅ Xử lý response từ backend
+        if (result.suggestions) {
+          setSuggestions(result.suggestions);
+        } else if (result.explanation) {
+          // fallback
+          setSuggestions(result.explanation);
+        } else if (result.feedback) {
+          // fallback khác
+          setSuggestions(result.feedback);
+        } else {
+          setSuggestions("🤔 API trả về dữ liệu nhưng không có gợi ý cụ thể.");
+        }
       } catch (error) {
-        setExplanation("❌ Lỗi khi gọi ExplainService.");
+        console.error("❌ Lỗi khi fetch suggestions:", error);
+        setError(error.message);
+        setSuggestions(
+          `❌ **Lỗi khi gọi API gợi ý tên:**\n\n${error.message}\n\n` +
+            `Vui lòng:\n` +
+            `- Kiểm tra kết nối mạng\n` +
+            `- Đảm bảo backend đang chạy\n` +
+            `- Thử lại sau ít phút`
+        );
       } finally {
         setLoading(false);
       }
     };
 
-    fetchExplanation();
-  }, [code, language, currentUser]);
+    fetchSuggestions();
+  }, [code, language, currentUser?.username]);
+
+  // ✅ Loading state với thông tin chi tiết hơn
+  const renderLoadingState = () => (
+    <div className="flex items-center justify-center h-40">
+      <div className="text-center">
+        <div className="animate-spin w-8 h-8 border-2 border-orange-500 border-t-transparent rounded-full mx-auto mb-3"></div>
+        <p className="text-orange-600 font-medium">Đang phân tích code...</p>
+        <p className="text-xs text-gray-500 mt-1">
+          Gợi ý tên cho ngôn ngữ {language?.toUpperCase()}
+        </p>
+      </div>
+    </div>
+  );
+
+  // ✅ Error state với retry button
+  const renderErrorState = () => (
+    <div className="text-center p-6">
+      <div className="text-red-500 text-4xl mb-4">⚠️</div>
+      <div className="text-red-700 font-semibold mb-2">Có lỗi xảy ra</div>
+      <div className="text-sm text-gray-600 mb-4">{error}</div>
+      <button
+        onClick={() => window.location.reload()}
+        className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors text-sm"
+      >
+        🔄 Thử lại
+      </button>
+    </div>
+  );
 
   return (
     <div className="max-w-7xl mx-auto px-6 space-y-6">
@@ -117,25 +192,27 @@ const SuggestSection = ({ code, language, currentUser, onBack, onNew }) => {
           <span>Quay lại chỉnh sửa</span>
         </button>
 
-        <button
-          onClick={onNew}
-          className="flex items-center space-x-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition"
-        >
-          <svg
-            className="w-4 h-4"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={onNew}
+            className="flex items-center space-x-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition"
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M12 6v6m0 0v6m0-6h6m-6 0H6"
-            />
-          </svg>
-          <span>Code mới</span>
-        </button>
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+              />
+            </svg>
+            <span>Code mới</span>
+          </button>
+        </div>
       </div>
 
       {/* Content: 2 columns */}
@@ -143,33 +220,40 @@ const SuggestSection = ({ code, language, currentUser, onBack, onNew }) => {
         {/* Left: Code */}
         <div className="bg-white rounded-xl shadow-md p-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold">
-              📄 Mã {language?.toUpperCase()} gốc
+            <h2 className="text-lg font-semibold flex items-center space-x-2">
+              <span>📄</span>
+              <span>Mã {language?.toUpperCase()} gốc</span>
             </h2>
-            <span className="text-xs text-gray-600 bg-gray-100 px-2 py-1 rounded">
-              {code?.split("\n").length || 0} dòng
-            </span>
+            <div className="flex items-center space-x-2 text-xs">
+              <span className="text-gray-600 bg-gray-100 px-2 py-1 rounded">
+                {code?.split("\n").length || 0} dòng
+              </span>
+              <span className="text-orange-600 bg-orange-100 px-2 py-1 rounded">
+                {language?.toUpperCase() || "N/A"}
+              </span>
+            </div>
           </div>
           <div className="bg-gray-50 rounded-lg overflow-auto max-h-[500px] p-4 border">
             {renderCodeWithLineNumbers(code)}
           </div>
         </div>
 
-        {/* Right: Explanation */}
+        {/* Right: Suggestions */}
         <div className="bg-white rounded-xl shadow-md p-6 flex flex-col">
-          <h2 className="text-lg font-semibold mb-4">
-            ✨ Gợi ý tên hàm & biến
+          <h2 className="text-lg font-semibold mb-4 flex items-center space-x-2">
+            <span>🏷️</span>
+            <span>Gợi ý tên hàm & biến</span>
           </h2>
-          <div className="bg-gray-50 p-4 rounded-lg border flex-1 overflow-auto max-h-[500px]">
+
+          <div className="bg-orange-50 border border-orange-200 rounded-lg flex-1 overflow-hidden">
             {loading ? (
-              <div className="flex items-center justify-center h-40">
-                <div className="text-center">
-                  <div className="animate-spin w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-3"></div>
-                  <p className="text-gray-500 italic">Đang giải thích...</p>
-                </div>
-              </div>
+              renderLoadingState()
+            ) : error ? (
+              renderErrorState()
             ) : (
-              formatExplanation(explanation)
+              <div className="p-4 overflow-auto max-h-[500px]">
+                {formatSuggestions(suggestions)}
+              </div>
             )}
           </div>
         </div>

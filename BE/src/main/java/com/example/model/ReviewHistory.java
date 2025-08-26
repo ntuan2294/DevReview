@@ -12,9 +12,10 @@ public class ReviewHistory {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    // ✅ QUAN TRỌNG: Chỉ ignore "reviewHistories" field để tránh circular reference
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
-    @JsonIgnoreProperties({ "reviewHistories", "password" })
+    @JsonIgnoreProperties({ "reviewHistories", "password" }) // ⚡ Chỉ ignore specific fields
     private User user;
 
     @Column(name = "original_code", columnDefinition = "TEXT")
@@ -35,8 +36,7 @@ public class ReviewHistory {
     @PrePersist
     protected void onCreate() {
         this.createdAt = LocalDateTime.now();
-        // Đảm bảo language không null
-        if (this.language == null) {
+        if (this.language == null || this.language.trim().isEmpty()) {
             this.language = "unknown";
         }
     }
@@ -50,7 +50,7 @@ public class ReviewHistory {
         this.originalCode = originalCode;
         this.reviewSummary = reviewSummary;
         this.fixedCode = fixedCode;
-        this.language = language != null ? language : "unknown";
+        this.language = language != null && !language.trim().isEmpty() ? language.trim() : "unknown";
         this.createdAt = LocalDateTime.now();
     }
 
@@ -100,7 +100,7 @@ public class ReviewHistory {
     }
 
     public void setLanguage(String language) {
-        this.language = language != null ? language : "unknown";
+        this.language = language != null && !language.trim().isEmpty() ? language.trim() : "unknown";
     }
 
     public LocalDateTime getCreatedAt() {
@@ -111,7 +111,7 @@ public class ReviewHistory {
         this.createdAt = createdAt;
     }
 
-    // === UTILITY METHODS ===
+    // ✅ toString() tránh circular reference
     @Override
     public String toString() {
         return "ReviewHistory{" +
