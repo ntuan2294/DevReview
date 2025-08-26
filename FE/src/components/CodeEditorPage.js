@@ -71,7 +71,7 @@ const CodeEditorPage = () => {
         setIsLoadingHistory(false); // luôn reset về false sau khi fetch xong
       }
     },
-    [currentUser?.username] // FIXED: Chỉ giữ currentUser?.username để tránh infinite loop
+    [currentUser, isLoadingHistory] // FIXED: Thêm currentUser vào dependency
   );
 
   // ✅ Load lịch sử khi component mount
@@ -90,7 +90,7 @@ const CodeEditorPage = () => {
     window.addEventListener("historyUpdated", handleHistoryUpdated);
     return () =>
       window.removeEventListener("historyUpdated", handleHistoryUpdated);
-  }, []); // FIXED: Không cần fetchHistory trong dependency vì event handler không thay đổi
+  }, [fetchHistory]); // FIXED: Cần fetchHistory trong dependency vì sử dụng trong callback
 
   // ✅ Kiểm tra localStorage flag định kỳ
   // FIXED: Loại bỏ fetchHistory khỏi dependency để tránh infinite loop
@@ -115,7 +115,7 @@ const CodeEditorPage = () => {
     checkRefreshFlag();
     const interval = setInterval(checkRefreshFlag, 3000);
     return () => clearInterval(interval);
-  }, []); // FIXED: Không cần fetchHistory trong dependency vì interval callback không thay đổi
+  }, [fetchHistory]); // FIXED: Cần fetchHistory trong dependency vì sử dụng trong callback
 
   // ✅ Listen cho window focus
   // FIXED: Loại bỏ fetchHistory khỏi dependency để tránh infinite loop
@@ -129,7 +129,7 @@ const CodeEditorPage = () => {
 
     window.addEventListener("focus", handleWindowFocus);
     return () => window.removeEventListener("focus", handleWindowFocus);
-  }, [lastRefreshTime]); // FIXED: Chỉ cần lastRefreshTime, không cần fetchHistory
+  }, [lastRefreshTime, fetchHistory]); // FIXED: Cần fetchHistory trong dependency vì sử dụng trong callback
 
   // ✅ Manual refresh button handler
   const handleRefreshHistory = () => {
