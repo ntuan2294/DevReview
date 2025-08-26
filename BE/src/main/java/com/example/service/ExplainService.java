@@ -75,6 +75,7 @@ public class ExplainService {
                         + "3. Mô tả luồng hoạt động tổng thể (cách các phần kết hợp để chạy chương trình).\n"
                         + "4. Nếu có thể, hãy đưa ví dụ minh họa cách đoạn mã này hoạt động.\n\n"
                         + "❌ Không cần kiểm tra lỗi hoặc gợi ý cải tiến.\n\n"
+                        + "❌ Không để các dòng trống\"\n\n"
                         + "Đây là đoạn code:\n```%s\n%s\n```",
                 language.toUpperCase(), language.toLowerCase(), safeCode);
 

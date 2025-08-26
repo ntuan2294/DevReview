@@ -10,6 +10,7 @@ import com.example.service.AIService;
 import com.example.service.ExplainService;
 import com.example.service.ReviewHistoryService;
 import com.example.service.UserService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.example.service.SuggestNameService; // ✅ THÊM import này
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -138,6 +139,7 @@ public class ApiController {
         }
     }
 
+    // ✅ CHỈNH SỬA: Method saveHistory để xử lý error lines
     @PostMapping("/history/save")
     @Transactional
     public ResponseEntity<?> saveHistory(@RequestBody Map<String, Object> payload) {
@@ -173,29 +175,45 @@ public class ApiController {
             String fixedCode = (String) payload.getOrDefault("fixedCode", "");
 
             // ✅ XỬ LÝ LANGUAGE CHÍNH XÁC HƠN
-            String language = "unknown"; // default
-
+            String language = "unknown";
             if (payload.containsKey("language")) {
                 Object langObj = payload.get("language");
                 if (langObj != null) {
                     String langStr = langObj.toString().trim();
                     if (!langStr.isEmpty() && !langStr.equals("undefined") && !langStr.equals("null")) {
-                        language = langStr.toLowerCase(); // Chuẩn hóa về lowercase
+                        language = langStr.toLowerCase();
+                    }
+                }
+            }
+
+            // ✅ THÊM: Xử lý error lines
+            String errorLinesJson = null;
+            if (payload.containsKey("errorLines")) {
+                Object errorLinesObj = payload.get("errorLines");
+                if (errorLinesObj != null) {
+                    // Convert List<Integer> thành JSON string
+                    if (errorLinesObj instanceof List) {
+                        try {
+                            ObjectMapper mapper = new ObjectMapper();
+                            errorLinesJson = mapper.writeValueAsString(errorLinesObj);
+                            System.out.println("✅ Error lines JSON: " + errorLinesJson);
+                        } catch (Exception e) {
+                            System.err.println("❌ Lỗi convert error lines: " + e.getMessage());
+                        }
+                    } else if (errorLinesObj instanceof String) {
+                        errorLinesJson = (String) errorLinesObj;
                     }
                 }
             }
 
             System.out.println("Đang lưu cho user: " + user.getUsername() + " (ID: " + user.getId() + ")");
-            System.out.println("FINAL Language: '" + language + "'"); // ✅ LOG CUỐI CÙNG
-            System.out.println("Original code length: " + originalCode.length());
-            System.out.println("Review summary length: " + reviewSummary.length());
-            System.out.println("Fixed code length: " + fixedCode.length());
+            System.out.println("FINAL Language: '" + language + "'");
+            System.out.println("Error lines: " + errorLinesJson);
 
-            // ✅ CHẮC CHẮN GỌI METHOD CÓ LANGUAGE
+            // ✅ GỌI SERVICE VỚI ERROR LINES
             ReviewHistory savedHistory = reviewHistoryService.saveHistory(user, originalCode, reviewSummary, fixedCode,
-                    language);
-            System.out.println("✅ Lưu thành công với ID: " + savedHistory.getId() + ", Language: '"
-                    + savedHistory.getLanguage() + "'");
+                    language, errorLinesJson);
+            System.out.println("✅ Lưu thành công với ID: " + savedHistory.getId());
 
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
@@ -215,7 +233,7 @@ public class ApiController {
         }
     }
 
-    // ✅ FIX CIRCULAR REFERENCE - Manual Serialize
+    // ✅ CẬP NHẬT: Các method get history để include error lines
     @GetMapping("/history/{username}")
     @Transactional(readOnly = true)
     public ResponseEntity<?> getHistoryByUsername(@PathVariable String username) {
@@ -225,7 +243,7 @@ public class ApiController {
             List<ReviewHistory> history = reviewHistoryService.getHistory(username);
             System.out.println("Tìm thấy " + history.size() + " records cho user: " + username);
 
-            // ✅ MANUAL SERIALIZE để tránh circular reference
+            // ✅ MANUAL SERIALIZE với error lines
             List<Map<String, Object>> response = history.stream().map(h -> {
                 Map<String, Object> item = new HashMap<>();
                 item.put("id", h.getId());
@@ -233,9 +251,9 @@ public class ApiController {
                 item.put("reviewSummary", h.getReviewSummary());
                 item.put("fixedCode", h.getFixedCode());
                 item.put("language", h.getLanguage());
+                item.put("errorLines", h.getErrorLines()); // ✅ THÊM error lines
                 item.put("createdAt", h.getCreatedAt());
 
-                // ✅ CHỈ LẤY THÔNG TIN CẦN THIẾT CỦA USER
                 if (h.getUser() != null) {
                     item.put("user", Map.of(
                             "id", h.getUser().getId(),
@@ -258,7 +276,7 @@ public class ApiController {
         }
     }
 
-    // ✅ FIX DETAIL API
+    // ✅ CẬP NHẬT: Get history detail với error lines
     @GetMapping("/history/detail/{id}")
     @Transactional(readOnly = true)
     public ResponseEntity<?> getHistoryDetail(@PathVariable Long id) {
@@ -270,13 +288,14 @@ public class ApiController {
                         System.out
                                 .println("Tìm thấy lịch sử ID " + id + " cho user: " + history.getUser().getUsername());
 
-                        // ✅ MANUAL SERIALIZE để tránh circular reference
+                        // ✅ MANUAL SERIALIZE với error lines
                         Map<String, Object> response = new HashMap<>();
                         response.put("id", history.getId());
                         response.put("originalCode", history.getOriginalCode());
                         response.put("reviewSummary", history.getReviewSummary());
                         response.put("fixedCode", history.getFixedCode());
                         response.put("language", history.getLanguage());
+                        response.put("errorLines", history.getErrorLines()); // ✅ THÊM error lines
                         response.put("createdAt", history.getCreatedAt());
 
                         if (history.getUser() != null) {
@@ -301,30 +320,6 @@ public class ApiController {
 
             return ResponseEntity.status(500).body(errorResponse);
         }
-    }
-
-    @GetMapping("/history/item/{id}")
-    @Transactional(readOnly = true)
-    public ResponseEntity<Map<String, Object>> getHistoryItem(@PathVariable Long id) {
-        return reviewHistoryRepository.findById(id)
-                .map(history -> {
-                    Map<String, Object> response = new HashMap<>();
-                    response.put("id", history.getId());
-                    response.put("originalCode", history.getOriginalCode());
-                    response.put("reviewSummary", history.getReviewSummary());
-                    response.put("fixedCode", history.getFixedCode());
-                    response.put("language", history.getLanguage());
-                    response.put("createdAt", history.getCreatedAt());
-
-                    if (history.getUser() != null) {
-                        response.put("user", Map.of(
-                                "id", history.getUser().getId(),
-                                "username", history.getUser().getUsername()));
-                    }
-
-                    return ResponseEntity.ok(response);
-                })
-                .orElse(ResponseEntity.notFound().build());
     }
 
     @GetMapping("/user/{username}")

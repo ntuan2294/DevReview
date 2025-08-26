@@ -12,10 +12,9 @@ public class ReviewHistory {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    // ✅ QUAN TRỌNG: Chỉ ignore "reviewHistories" field để tránh circular reference
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
-    @JsonIgnoreProperties({ "reviewHistories", "password" }) // ⚡ Chỉ ignore specific fields
+    @JsonIgnoreProperties({ "reviewHistories", "password" })
     private User user;
 
     @Column(name = "original_code", columnDefinition = "TEXT")
@@ -29,6 +28,10 @@ public class ReviewHistory {
 
     @Column(name = "language", length = 50)
     private String language;
+
+    // ✅ THÊM: Field để lưu vị trí các dòng bị lỗi
+    @Column(name = "error_lines", columnDefinition = "TEXT")
+    private String errorLines; // Lưu dạng JSON array string: "[1,5,10]"
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;
@@ -51,6 +54,18 @@ public class ReviewHistory {
         this.reviewSummary = reviewSummary;
         this.fixedCode = fixedCode;
         this.language = language != null && !language.trim().isEmpty() ? language.trim() : "unknown";
+        this.createdAt = LocalDateTime.now();
+    }
+
+    // ✅ THÊM: Constructor với error lines
+    public ReviewHistory(User user, String originalCode, String reviewSummary, String fixedCode,
+            String language, String errorLines) {
+        this.user = user;
+        this.originalCode = originalCode;
+        this.reviewSummary = reviewSummary;
+        this.fixedCode = fixedCode;
+        this.language = language != null && !language.trim().isEmpty() ? language.trim() : "unknown";
+        this.errorLines = errorLines;
         this.createdAt = LocalDateTime.now();
     }
 
@@ -103,6 +118,15 @@ public class ReviewHistory {
         this.language = language != null && !language.trim().isEmpty() ? language.trim() : "unknown";
     }
 
+    // ✅ THÊM: Getter/Setter cho error lines
+    public String getErrorLines() {
+        return errorLines;
+    }
+
+    public void setErrorLines(String errorLines) {
+        this.errorLines = errorLines;
+    }
+
     public LocalDateTime getCreatedAt() {
         return createdAt;
     }
@@ -117,6 +141,7 @@ public class ReviewHistory {
         return "ReviewHistory{" +
                 "id=" + id +
                 ", language='" + language + '\'' +
+                ", errorLines='" + errorLines + '\'' +
                 ", createdAt=" + createdAt +
                 ", userId=" + (user != null ? user.getId() : null) +
                 '}';

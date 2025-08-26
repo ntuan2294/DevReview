@@ -87,6 +87,8 @@ public class SuggestNameService {
                         + "4. Đưa ra quy tắc đặt tên tốt cho ngôn ngữ %s.\n\n"
                         + "**Lưu ý:** \n"
                         + "- ❌ KHÔNG sửa code, chỉ gợi ý tên.\n"
+                        + "- ❌ KHÔNG hiện kết quả ở dạng bảng.\n"
+                        + "- ❌ KHÔNG để dòng trống"
                         + "- ✅ Tập trung vào naming convention chuẩn của %s.\n"
                         + "- ✅ Đề xuất tên có ý nghĩa, dễ hiểu.\n"
                         + "- ✅ Giải thích lý do tại sao tên mới tốt hơn.\n\n"

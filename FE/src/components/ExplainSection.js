@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import ReactMarkdown from "react-markdown";
 import ExplainService from "../services/ExplainService";
+import LoadingSpinner from "./LoadingSpinner"; // ✅ Import component loading thống nhất
 
 const ExplainSection = ({ code, language, currentUser, onBack, onNew }) => {
   const [explanation, setExplanation] = useState(null);
@@ -27,42 +27,49 @@ const ExplainSection = ({ code, language, currentUser, onBack, onNew }) => {
     );
   };
 
-  // Format explanation
+  // Format explanation thành plain text
   const formatExplanation = (text) => {
     if (!text) return "Đang xử lý...";
+
+    // Loại bỏ markdown formatting và chỉ hiển thị text thuần
+    let plainText = text
+      // Loại bỏ code blocks
+      .replace(/```[\s\S]*?```/g, "[Code ví dụ đã được loại bỏ]")
+      // Loại bỏ inline code
+      .replace(/`([^`]+)`/g, "$1")
+      // Loại bỏ headers nhưng giữ lại nội dung
+      .replace(/^#{1,6}\s*/gm, "")
+      // Loại bỏ bold/italic nhưng giữ lại nội dung
+      .replace(/\*\*(.*?)\*\*/g, "$1")
+      .replace(/\*(.*?)\*/g, "$1")
+      // Chuyển bullet points thành ký tự đơn giản
+      .replace(/^\s*[-*+]\s*/gm, "• ")
+      // Loại bỏ numbered lists markers
+      .replace(/^\s*\d+\.\s*/gm, "")
+      // Chuẩn hóa line breaks
+      .replace(/\n\s*\n/g, "\n\n")
+      .trim();
+
     return (
-      <div className="prose prose-sm max-w-none text-gray-800">
-        <ReactMarkdown
-          components={{
-            code: ({ inline, children, ...props }) =>
-              !inline ? (
-                <pre className="bg-gray-900 text-green-400 p-3 rounded-lg overflow-x-auto shadow-inner">
-                  <code {...props}>{children}</code>
-                </pre>
-              ) : (
-                <code className="bg-gray-200 px-1 py-0.5 rounded text-sm">
-                  {children}
-                </code>
-              ),
-            h1: ({ children }) => (
-              <h1 className="text-xl font-bold mb-3 text-blue-700">
-                {children}
-              </h1>
-            ),
-            h2: ({ children }) => (
-              <h2 className="text-lg font-semibold mb-2 text-blue-600">
-                {children}
-              </h2>
-            ),
-            h3: ({ children }) => (
-              <h3 className="text-md font-medium mb-2 text-blue-500">
-                {children}
-              </h3>
-            ),
-          }}
-        >
-          {text}
-        </ReactMarkdown>
+      <div className="text-gray-800 leading-relaxed">
+        {plainText.split("\n").map((line, idx) => {
+          // Tạo style khác nhau cho các loại dòng
+          const isHeader = line.includes(":") && line.length < 100;
+          const isBullet = line.startsWith("• ");
+
+          return (
+            <p
+              key={idx}
+              className={`
+                ${line.trim() ? "mb-3" : "mb-4"}
+                ${isHeader ? "font-semibold text-blue-700 text-lg" : ""}
+                ${isBullet ? "ml-4 mb-2" : ""}
+              `}
+            >
+              {line || "\u00A0"}
+            </p>
+          );
+        })}
       </div>
     );
   };
@@ -160,12 +167,15 @@ const ExplainSection = ({ code, language, currentUser, onBack, onNew }) => {
           <h2 className="text-lg font-semibold mb-4">📖 Giải thích chi tiết</h2>
           <div className="bg-gray-50 p-4 rounded-lg border flex-1 overflow-auto max-h-[500px]">
             {loading ? (
-              <div className="flex items-center justify-center h-40">
-                <div className="text-center">
-                  <div className="animate-spin w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-3"></div>
-                  <p className="text-gray-500 italic">Đang giải thích...</p>
-                </div>
-              </div>
+              // ✅ THAY ĐỔI: Sử dụng LoadingSpinner component thống nhất
+              <LoadingSpinner
+                message="Đang giải thích code..."
+                submessage={`Phân tích ${language?.toUpperCase() || "N/A"} - ${
+                  code?.split("\n").length || 0
+                } dòng`}
+                color="blue"
+                size="medium"
+              />
             ) : (
               formatExplanation(explanation)
             )}

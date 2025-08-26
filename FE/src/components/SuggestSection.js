@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import ReactMarkdown from "react-markdown";
 import SuggestNameService from "../services/SuggestNameService";
+import LoadingSpinner from "./LoadingSpinner"; // ✅ Import component loading thống nhất
 
 const SuggestSection = ({ code, language, currentUser, onBack, onNew }) => {
   const [suggestions, setSuggestions] = useState(null);
@@ -28,57 +28,97 @@ const SuggestSection = ({ code, language, currentUser, onBack, onNew }) => {
     );
   };
 
-  // Format suggestions với style riêng cho suggest
+  // Format suggestions thành plain text
   const formatSuggestions = (text) => {
     if (!text) return "Đang xử lý...";
+
+    // Loại bỏ markdown formatting và chỉ hiển thị text thuần
+    let plainText = text
+      // Loại bỏ code blocks hoàn toàn
+      .replace(/```[\s\S]*?```/g, "[Code ví dụ đã được loại bỏ]")
+      // Loại bỏ inline code nhưng giữ nội dung
+      .replace(/`([^`]+)`/g, "$1")
+      // Loại bỏ headers nhưng giữ lại nội dung và làm nổi bật
+      .replace(/^#{1,6}\s*/gm, "")
+      // Loại bỏ bold/italic nhưng giữ lại nội dung
+      .replace(/\*\*(.*?)\*\*/g, "$1")
+      .replace(/\*(.*?)\*/g, "$1")
+      // Chuyển bullet points thành ký tự đơn giản
+      .replace(/^\s*[-*+]\s*/gm, "• ")
+      // Loại bỏ numbered lists markers nhưng giữ nội dung
+      .replace(/^\s*\d+\.\s*/gm, "")
+      // Chuẩn hóa line breaks
+      .replace(/\n\s*\n/g, "\n\n")
+      .trim();
+
     return (
-      <div className="prose prose-sm max-w-none text-gray-800">
-        <ReactMarkdown
-          components={{
-            code: ({ inline, children, ...props }) =>
-              !inline ? (
-                <pre className="bg-orange-900 text-orange-200 p-3 rounded-lg overflow-x-auto shadow-inner">
-                  <code {...props}>{children}</code>
-                </pre>
-              ) : (
-                <code className="bg-orange-200 text-orange-900 px-1 py-0.5 rounded text-sm">
-                  {children}
-                </code>
-              ),
-            h1: ({ children }) => (
-              <h1 className="text-xl font-bold mb-3 text-orange-700">
-                {children}
-              </h1>
-            ),
-            h2: ({ children }) => (
-              <h2 className="text-lg font-semibold mb-2 text-orange-600">
-                {children}
-              </h2>
-            ),
-            h3: ({ children }) => (
-              <h3 className="text-md font-medium mb-2 text-orange-500">
-                {children}
-              </h3>
-            ),
-            ul: ({ children }) => (
-              <ul className="list-disc ml-4 mb-3 space-y-1">{children}</ul>
-            ),
-            ol: ({ children }) => (
-              <ol className="list-decimal ml-4 mb-3 space-y-1">{children}</ol>
-            ),
-            li: ({ children }) => <li className="text-gray-700">{children}</li>,
-            strong: ({ children }) => (
-              <strong className="font-semibold text-orange-800">
-                {children}
-              </strong>
-            ),
-          }}
-        >
-          {text}
-        </ReactMarkdown>
+      <div className="text-gray-800 leading-relaxed">
+        {plainText.split("\n").map((line, idx) => {
+          // Tạo style khác nhau cho các loại dòng
+          const isMainHeader =
+            line.includes("Gợi ý tên") ||
+            line.includes("Quy tắc đặt tên") ||
+            line.includes("Nhiệm vụ");
+          const isSubHeader =
+            line.includes(":") && line.length < 100 && !line.startsWith("• ");
+          const isBullet = line.startsWith("• ");
+          const isEmpty = !line.trim();
+
+          return (
+            <p
+              key={idx}
+              className={`
+                ${isEmpty ? "mb-4" : "mb-3"}
+                ${
+                  isMainHeader
+                    ? "font-bold text-orange-700 text-xl border-b border-orange-200 pb-2 mb-4"
+                    : ""
+                }
+                ${
+                  isSubHeader && !isMainHeader
+                    ? "font-semibold text-orange-600 text-lg mt-4 mb-2"
+                    : ""
+                }
+                ${isBullet ? "ml-4 mb-2 text-gray-700" : ""}
+              `}
+            >
+              {line || "\u00A0"}
+            </p>
+          );
+        })}
       </div>
     );
   };
+
+  // ✅ Error state với retry button (sử dụng LoadingSpinner style)
+  const renderErrorState = () => (
+    <div className="flex items-center justify-center h-40">
+      <div className="text-center">
+        <div className="text-red-500 text-4xl mb-4">⚠️</div>
+        <div className="text-red-700 font-semibold mb-2">Có lỗi xảy ra</div>
+        <div className="text-sm text-gray-600 mb-4">{error}</div>
+        <button
+          onClick={() => window.location.reload()}
+          className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors text-sm flex items-center space-x-2 mx-auto"
+        >
+          <svg
+            className="w-4 h-4"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+            />
+          </svg>
+          <span>Thử lại</span>
+        </button>
+      </div>
+    </div>
+  );
 
   // ✅ Gọi SuggestName API khi code thay đổi
   useEffect(() => {
@@ -114,10 +154,8 @@ const SuggestSection = ({ code, language, currentUser, onBack, onNew }) => {
         if (result.suggestions) {
           setSuggestions(result.suggestions);
         } else if (result.explanation) {
-          // fallback
           setSuggestions(result.explanation);
         } else if (result.feedback) {
-          // fallback khác
           setSuggestions(result.feedback);
         } else {
           setSuggestions("🤔 API trả về dữ liệu nhưng không có gợi ý cụ thể.");
@@ -126,11 +164,11 @@ const SuggestSection = ({ code, language, currentUser, onBack, onNew }) => {
         console.error("❌ Lỗi khi fetch suggestions:", error);
         setError(error.message);
         setSuggestions(
-          `❌ **Lỗi khi gọi API gợi ý tên:**\n\n${error.message}\n\n` +
+          `❌ Lỗi khi gọi API gợi ý tên:\n\n${error.message}\n\n` +
             `Vui lòng:\n` +
-            `- Kiểm tra kết nối mạng\n` +
-            `- Đảm bảo backend đang chạy\n` +
-            `- Thử lại sau ít phút`
+            `• Kiểm tra kết nối mạng\n` +
+            `• Đảm bảo backend đang chạy\n` +
+            `• Thử lại sau ít phút`
         );
       } finally {
         setLoading(false);
@@ -139,34 +177,6 @@ const SuggestSection = ({ code, language, currentUser, onBack, onNew }) => {
 
     fetchSuggestions();
   }, [code, language, currentUser?.username]);
-
-  // ✅ Loading state với thông tin chi tiết hơn
-  const renderLoadingState = () => (
-    <div className="flex items-center justify-center h-40">
-      <div className="text-center">
-        <div className="animate-spin w-8 h-8 border-2 border-orange-500 border-t-transparent rounded-full mx-auto mb-3"></div>
-        <p className="text-orange-600 font-medium">Đang phân tích code...</p>
-        <p className="text-xs text-gray-500 mt-1">
-          Gợi ý tên cho ngôn ngữ {language?.toUpperCase()}
-        </p>
-      </div>
-    </div>
-  );
-
-  // ✅ Error state với retry button
-  const renderErrorState = () => (
-    <div className="text-center p-6">
-      <div className="text-red-500 text-4xl mb-4">⚠️</div>
-      <div className="text-red-700 font-semibold mb-2">Có lỗi xảy ra</div>
-      <div className="text-sm text-gray-600 mb-4">{error}</div>
-      <button
-        onClick={() => window.location.reload()}
-        className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors text-sm"
-      >
-        🔄 Thử lại
-      </button>
-    </div>
-  );
 
   return (
     <div className="max-w-7xl mx-auto px-6 space-y-6">
@@ -247,7 +257,15 @@ const SuggestSection = ({ code, language, currentUser, onBack, onNew }) => {
 
           <div className="bg-orange-50 border border-orange-200 rounded-lg flex-1 overflow-hidden">
             {loading ? (
-              renderLoadingState()
+              // ✅ THAY ĐỔI: Sử dụng LoadingSpinner component thống nhất
+              <LoadingSpinner
+                message="Đang phân tích code..."
+                submessage={`Gợi ý tên cho ${
+                  language?.toUpperCase() || "N/A"
+                } - ${code?.split("\n").length || 0} dòng`}
+                color="orange"
+                size="medium"
+              />
             ) : error ? (
               renderErrorState()
             ) : (

@@ -1,76 +1,92 @@
 import React, { useState } from "react";
-import ReactMarkdown from "react-markdown";
+import LoadingSpinner from "./LoadingSpinner";
+import CodeWithHighlight from "./CodeWithHighlight"; // ✅ Import component highlight
 
-const ReviewSection = ({ code, language, reviewResult, fixedCode, currentUser, onBack, onNew }) => {
+const ReviewSection = ({
+  code,
+  language,
+  reviewResult,
+  fixedCode,
+  currentUser,
+  onBack,
+  onNew,
+}) => {
   const [activeTab, setActiveTab] = useState("review"); // 'review' | 'fixed'
 
-  // Helper function để render code với line numbers
+  // Helper function để render code với line numbers (cho fixed code - không cần highlight)
   const renderCodeWithLineNumbers = (codeContent) => {
     if (!codeContent) return "Không có mã nguồn.";
-    
+
     const lines = codeContent.split("\n");
     return (
       <div className="font-mono text-sm">
         {lines.map((line, idx) => (
           <div key={idx} className="flex">
-            <span className="text-gray-400 select-none pr-4 text-right" style={{ minWidth: '3rem' }}>
+            <span
+              className="text-gray-400 select-none pr-4 text-right"
+              style={{ minWidth: "3rem" }}
+            >
               {idx + 1}
             </span>
-            <span className="flex-1 whitespace-pre-wrap">{line || ' '}</span>
+            <span className="flex-1 whitespace-pre-wrap">{line || " "}</span>
           </div>
         ))}
       </div>
     );
   };
 
-  // Helper function để format review feedback
+  // Format review feedback thành plain text
   const formatReviewFeedback = (feedback) => {
     if (!feedback) return "Đang xử lý...";
-    
-    // Nếu feedback có markdown format
+
+    // Loại bỏ markdown formatting và chỉ hiển thị text thuần
+    let plainText = feedback
+      // Loại bỏ code blocks
+      .replace(/```[\s\S]*?```/g, "[Code đã được loại bỏ]")
+      // Loại bỏ inline code
+      .replace(/`([^`]+)`/g, "$1")
+      // Loại bỏ headers
+      .replace(/^#{1,6}\s*/gm, "")
+      // Loại bỏ bold/italic
+      .replace(/\*\*(.*?)\*\*/g, "$1")
+      .replace(/\*(.*?)\*/g, "$1")
+      // Loại bỏ bullet points
+      .replace(/^\s*[-*+]\s*/gm, "• ")
+      // Loại bỏ numbered lists
+      .replace(/^\s*\d+\.\s*/gm, "")
+      // Chuẩn hóa line breaks
+      .replace(/\n\s*\n/g, "\n\n")
+      .trim();
+
     return (
-      <div className="prose prose-sm max-w-none text-gray-800">
-        <ReactMarkdown
-          components={{
-            // Custom rendering cho code blocks
-            code: ({ node, inline, className, children, ...props }) => {
-              return !inline ? (
-                <pre className="bg-gray-800 text-green-400 p-3 rounded-md overflow-x-auto">
-                  <code {...props}>{children}</code>
-                </pre>
-              ) : (
-                <code className="bg-gray-100 px-1 py-0.5 rounded text-sm" {...props}>
-                  {children}
-                </code>
-              );
-            },
-            // Custom rendering cho headers
-            h1: ({ children }) => <h1 className="text-xl font-bold mb-3 text-blue-700">{children}</h1>,
-            h2: ({ children }) => <h2 className="text-lg font-semibold mb-2 text-blue-600">{children}</h2>,
-            h3: ({ children }) => <h3 className="text-md font-medium mb-2 text-blue-500">{children}</h3>,
-            // Custom rendering cho lists
-            ul: ({ children }) => <ul className="list-disc ml-4 mb-3">{children}</ul>,
-            ol: ({ children }) => <ol className="list-decimal ml-4 mb-3">{children}</ol>,
-            li: ({ children }) => <li className="mb-1">{children}</li>,
-          }}
-        >
-          {feedback}
-        </ReactMarkdown>
+      <div className="text-gray-800 leading-relaxed">
+        {plainText.split("\n").map((line, idx) => (
+          <p key={idx} className={`${line.trim() ? "mb-2" : "mb-4"}`}>
+            {line || "\u00A0"} {/* Non-breaking space for empty lines */}
+          </p>
+        ))}
       </div>
     );
   };
 
   // Lấy improved code từ reviewResult
   const getImprovedCode = () => {
-    return reviewResult?.improvedCode || 
-           reviewResult?.fixedCode || 
-           fixedCode || 
-           "⚠️ Không tìm thấy code đã cải thiện.";
+    return (
+      reviewResult?.improvedCode ||
+      reviewResult?.fixedCode ||
+      fixedCode ||
+      "⚠️ Không tìm thấy code đã cải thiện."
+    );
   };
 
   // Lấy original code
   const getOriginalCode = () => {
     return reviewResult?.originalCode || code || "Không có mã nguồn gốc.";
+  };
+
+  // ✅ THÊM: Lấy error lines
+  const getErrorLines = () => {
+    return reviewResult?.errorLines || [];
   };
 
   return (
@@ -82,28 +98,58 @@ const ReviewSection = ({ code, language, reviewResult, fixedCode, currentUser, o
             onClick={onBack}
             className="flex items-center space-x-2 bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M15 19l-7-7 7-7"
+              />
             </svg>
             <span>Quay lại chỉnh sửa</span>
           </button>
-          
+
           {reviewResult?.isFromHistory && (
             <div className="flex items-center space-x-2 text-sm text-blue-600 bg-blue-100 px-3 py-1 rounded">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
               </svg>
               <span>Từ lịch sử: ID #{reviewResult.historyId}</span>
             </div>
           )}
         </div>
-        
+
         <button
           onClick={onNew}
           className="flex items-center space-x-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition"
         >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+          <svg
+            className="w-4 h-4"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+            />
           </svg>
           <span>Code mới</span>
         </button>
@@ -111,20 +157,14 @@ const ReviewSection = ({ code, language, reviewResult, fixedCode, currentUser, o
 
       {/* Bố cục 2 cột */}
       <div className="grid grid-cols-2 gap-6">
-        {/* Cột trái: Code gốc */}
+        {/* ✅ CỘT TRÁI: Sử dụng CodeWithHighlight component */}
         <div className="bg-white rounded-xl shadow-md p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold">
-              📄 Mã {language?.toUpperCase()} gốc
-            </h2>
-            <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
-              {getOriginalCode().split('\n').length} dòng
-            </span>
-          </div>
-          
-          <div className="bg-gray-50 rounded-lg overflow-auto max-h-96 p-4 border">
-            {renderCodeWithLineNumbers(getOriginalCode())}
-          </div>
+          <CodeWithHighlight
+            code={getOriginalCode()}
+            errorLines={getErrorLines()}
+            language={language}
+            maxHeight="max-h-96"
+          />
         </div>
 
         {/* Cột phải: Tabs Review / Code đã sửa */}
@@ -134,14 +174,24 @@ const ReviewSection = ({ code, language, reviewResult, fixedCode, currentUser, o
             <button
               onClick={() => setActiveTab("review")}
               className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-all ${
-                activeTab === "review" 
-                  ? "bg-blue-600 text-white shadow-sm" 
+                activeTab === "review"
+                  ? "bg-blue-600 text-white shadow-sm"
                   : "text-gray-600 hover:text-blue-600"
               }`}
             >
               <div className="flex items-center justify-center space-x-2">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
                 </svg>
                 <span>Kết quả Review</span>
               </div>
@@ -149,15 +199,30 @@ const ReviewSection = ({ code, language, reviewResult, fixedCode, currentUser, o
             <button
               onClick={() => setActiveTab("fixed")}
               className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-all ${
-                activeTab === "fixed" 
-                  ? "bg-green-600 text-white shadow-sm" 
+                activeTab === "fixed"
+                  ? "bg-green-600 text-white shadow-sm"
                   : "text-gray-600 hover:text-green-600"
               }`}
             >
               <div className="flex items-center justify-center space-x-2">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+                  />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                  />
                 </svg>
                 <span>Code đã cải thiện</span>
               </div>
@@ -172,12 +237,14 @@ const ReviewSection = ({ code, language, reviewResult, fixedCode, currentUser, o
                   {reviewResult ? (
                     formatReviewFeedback(reviewResult.feedback)
                   ) : (
-                    <div className="flex items-center justify-center h-32">
-                      <div className="text-center">
-                        <div className="animate-spin w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-3"></div>
-                        <p className="text-gray-500 italic">Đang phân tích code...</p>
-                      </div>
-                    </div>
+                    <LoadingSpinner
+                      message="Đang phân tích code..."
+                      submessage={`Ngôn ngữ: ${
+                        language?.toUpperCase() || "N/A"
+                      }`}
+                      color="blue"
+                      size="medium"
+                    />
                   )}
                 </div>
               </div>

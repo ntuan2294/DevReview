@@ -1,4 +1,4 @@
-// CodeResultPage.js - Fix lịch sử không refresh
+// CodeResultPage.js - Updated to handle error lines
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { useCode } from "./CodeContext";
@@ -13,24 +13,26 @@ const CodeResultPage = () => {
   const currentUser = AuthService.getCurrentUser();
 
   const handleBack = () => navigate("/editor");
-  
+
   const handleNew = async () => {
     console.log("=== BẮT ĐẦU HANDLE NEW ===");
     console.log("Current user:", currentUser);
     console.log("Review result:", reviewResult);
-    console.log("Language:", language); // ✅ THÊM LOG
+    console.log("Language:", language);
+    console.log("Error lines:", reviewResult?.errorLines); // ✅ THÊM log error lines
 
     // Hỏi user có muốn lưu không (nếu có dữ liệu và chưa phải từ history)
-    const shouldSave = reviewResult && 
-                      currentUser && 
-                      currentUser.username && 
-                      !reviewResult.isFromHistory && // Không lưu lại nếu đây là data từ history
-                      window.confirm("Bạn có muốn lưu kết quả review này vào lịch sử không?");
+    const shouldSave =
+      reviewResult &&
+      currentUser &&
+      currentUser.username &&
+      !reviewResult.isFromHistory && // Không lưu lại nếu đây là data từ history
+      window.confirm("Bạn có muốn lưu kết quả review này vào lịch sử không?");
 
     if (shouldSave) {
       try {
         let userId;
-        
+
         // Lấy userId
         if (currentUser.id) {
           userId = currentUser.id;
@@ -38,16 +40,18 @@ const CodeResultPage = () => {
         } else {
           console.log("Lấy userId từ API cho username:", currentUser.username);
           try {
-            const response = await axios.get(`http://localhost:8000/api/user/${currentUser.username}`, {
-              timeout: 5000
-            });
+            const response = await axios.get(
+              `http://localhost:8000/api/user/${currentUser.username}`,
+              {
+                timeout: 5000,
+              }
+            );
             userId = response.data.id;
             console.log("Đã lấy được userId:", userId);
-            
+
             // Cập nhật currentUser với userId
             const updatedUser = { ...currentUser, id: userId };
             AuthService.setCurrentUser(updatedUser);
-            
           } catch (userError) {
             console.error("Không thể lấy userId:", userError);
             alert("Không thể lấy thông tin user. Vui lòng đăng nhập lại.");
@@ -57,44 +61,53 @@ const CodeResultPage = () => {
           }
         }
 
-        // ✅ THÊM LANGUAGE VÀO PAYLOAD
+        // ✅ THÊM ERROR LINES VÀO PAYLOAD
         const payload = {
           userId: userId,
           username: currentUser.username,
           originalCode: code || "",
           reviewSummary: reviewResult.feedback || reviewResult.summary || "",
           fixedCode: reviewResult.improvedCode || reviewResult.fixedCode || "",
-          language: language || "unknown" // ✅ THÊM DÒNG NÀY
+          language: language || "unknown",
+          errorLines: reviewResult.errorLines || [], // ✅ THÊM error lines
         };
-        
+
         console.log("Payload gửi đi:", JSON.stringify(payload, null, 2));
-        
+
         const result = await SaveService.saveReview(payload);
         console.log("✅ Lưu lịch sử thành công!", result);
-        
+
         // ✅ QUAN TRỌNG: Broadcast event để các component khác biết cần refresh
-        window.dispatchEvent(new CustomEvent('historyUpdated', {
-          detail: { newHistoryId: result.historyId, username: currentUser.username }
-        }));
-        
+        window.dispatchEvent(
+          new CustomEvent("historyUpdated", {
+            detail: {
+              newHistoryId: result.historyId,
+              username: currentUser.username,
+            },
+          })
+        );
+
         // ✅ Set flag để CodeEditorPage biết cần refresh
-        localStorage.setItem('history_needs_refresh', 'true');
-        localStorage.setItem('last_save_time', Date.now().toString());
-        
-        alert("✅ Đã lưu kết quả vào lịch sử!\n\nLịch sử sẽ được cập nhật khi bạn quay lại trang chủ.");
-        
+        localStorage.setItem("history_needs_refresh", "true");
+        localStorage.setItem("last_save_time", Date.now().toString());
+
+        alert(
+          "✅ Đã lưu kết quả vào lịch sử!\n\nLịch sử sẽ được cập nhật khi bạn quay lại trang chủ."
+        );
       } catch (err) {
         console.error("Lỗi khi lưu lịch sử:", err);
-        
+
         let errorMessage = "Không thể lưu lịch sử.";
         if (err.message === "Request timeout") {
           errorMessage = "Lưu lịch sử mất quá nhiều thời gian.";
         } else if (err.response) {
-          errorMessage = `Lỗi server: ${err.response.status} - ${err.response.data?.message || err.response.statusText}`;
+          errorMessage = `Lỗi server: ${err.response.status} - ${
+            err.response.data?.message || err.response.statusText
+          }`;
         } else if (err.message) {
           errorMessage = `Lỗi: ${err.message}`;
         }
-        
+
         alert(`❌ ${errorMessage}\n\nVui lòng thử lại hoặc liên hệ hỗ trợ.`);
       }
     }
@@ -105,7 +118,7 @@ const CodeResultPage = () => {
     navigate("/editor", { replace: true });
     console.log("=== KẾT THÚC HANDLE NEW ===");
   };
-  
+
   const handleLogout = () => {
     AuthService.logout();
     navigate("/");
@@ -123,7 +136,8 @@ const CodeResultPage = () => {
           </h1>
           <div className="flex items-center space-x-4">
             <span className="text-sm text-gray-800">
-              Xin chào, <span className="font-semibold">{currentUser?.username}</span>
+              Xin chào,{" "}
+              <span className="font-semibold">{currentUser?.username}</span>
             </span>
             <button
               onClick={handleLogout}

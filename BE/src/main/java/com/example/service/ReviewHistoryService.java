@@ -14,18 +14,25 @@ public class ReviewHistoryService {
     @Autowired
     private ReviewHistoryRepository reviewHistoryRepository;
 
-    // ✅ Method cũ - giữ cho backward compatibility (không có language)
+    // ✅ Method cũ - giữ cho backward compatibility (không có language và error
+    // lines)
     public ReviewHistory saveHistory(User user, String originalCode, String reviewSummary, String fixedCode) {
-        return saveHistory(user, originalCode, reviewSummary, fixedCode, "unknown");
+        return saveHistory(user, originalCode, reviewSummary, fixedCode, "unknown", null);
     }
 
-    // Trong ReviewHistoryService.java
-
+    // ✅ Method cũ - với language nhưng không có error lines
     public ReviewHistory saveHistory(User user, String originalCode, String reviewSummary, String fixedCode,
             String language) {
-        System.out.println("=== SAVE HISTORY DEBUG ===");
+        return saveHistory(user, originalCode, reviewSummary, fixedCode, language, null);
+    }
+
+    // ✅ THÊM: Method mới với error lines
+    public ReviewHistory saveHistory(User user, String originalCode, String reviewSummary, String fixedCode,
+            String language, String errorLines) {
+        System.out.println("=== SAVE HISTORY WITH ERROR LINES DEBUG ===");
         System.out.println("User: " + user.getUsername());
         System.out.println("Language parameter: '" + language + "'");
+        System.out.println("Error lines parameter: '" + errorLines + "'");
 
         ReviewHistory history = new ReviewHistory();
         history.setUser(user);
@@ -33,21 +40,29 @@ public class ReviewHistoryService {
         history.setReviewSummary(reviewSummary);
         history.setFixedCode(fixedCode);
 
-        // ✅ FORCE SET LANGUAGE
+        // ✅ SET LANGUAGE
         String finalLanguage = (language != null && !language.trim().isEmpty()) ? language.trim() : "unknown";
         history.setLanguage(finalLanguage);
 
-        System.out.println("Before save - Language set to: '" + history.getLanguage() + "'");
+        // ✅ SET ERROR LINES
+        if (errorLines != null && !errorLines.trim().isEmpty()) {
+            history.setErrorLines(errorLines.trim());
+        }
+
+        System.out.println("Before save - Language: '" + history.getLanguage() + "'");
+        System.out.println("Before save - Error lines: '" + history.getErrorLines() + "'");
 
         ReviewHistory saved = reviewHistoryRepository.save(history);
 
         System.out.println("After save - Saved ID: " + saved.getId());
-        System.out.println("After save - Language in entity: '" + saved.getLanguage() + "'");
+        System.out.println("After save - Language: '" + saved.getLanguage() + "'");
+        System.out.println("After save - Error lines: '" + saved.getErrorLines() + "'");
 
         // ✅ VERIFY BẰNG DATABASE QUERY
         ReviewHistory verified = reviewHistoryRepository.findById(saved.getId()).orElse(null);
         if (verified != null) {
             System.out.println("Verified from DB - Language: '" + verified.getLanguage() + "'");
+            System.out.println("Verified from DB - Error lines: '" + verified.getErrorLines() + "'");
         }
 
         return saved;
@@ -94,6 +109,20 @@ public class ReviewHistoryService {
     // Method để tạo display name theo yêu cầu
     public String createHistoryDisplayName(ReviewHistory history) {
         String language = history.getLanguage() != null ? history.getLanguage().toUpperCase() : "UNKNOWN";
-        return String.format("Review %s Code #%d", language, history.getId());
+
+        // ✅ THÊM: Hiển thị số lỗi nếu có
+        String errorInfo = "";
+        if (history.getErrorLines() != null && !history.getErrorLines().trim().isEmpty()) {
+            try {
+                // Đếm số lỗi từ JSON string
+                String errorLines = history.getErrorLines();
+                long errorCount = errorLines.chars().filter(ch -> ch == ',').count() + 1;
+                errorInfo = String.format(" (%d lỗi)", errorCount);
+            } catch (Exception e) {
+                errorInfo = " (có lỗi)";
+            }
+        }
+
+        return String.format("Review %s Code #%d%s", language, history.getId(), errorInfo);
     }
 }
