@@ -77,6 +77,14 @@ const saveReview = async (payload) => {
 
 const SaveService = {
   saveReview,
+  // Thêm function mới để lưu với type
+  saveWithType: async (payload, type) => {
+    const payloadWithType = {
+      ...payload,
+      type: type // "Re", "Ex", "Su"
+    };
+    return await saveReview(payloadWithType);
+  }
 };
 
 export default SaveService;

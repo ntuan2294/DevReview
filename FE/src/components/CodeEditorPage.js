@@ -10,7 +10,7 @@ import axios from "axios";
 
 const CodeEditorPage = () => {
   const navigate = useNavigate();
-  const { code, setCode, language, setLanguage, setReviewResult } = useCode();
+  const { code, setCode, language, setLanguage, setReviewResult, setType } = useCode();
   const [loadingAction, setLoadingAction] = useState(null); // "review" | "explain" | null
   const [historyItems, setHistoryItems] = useState([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
@@ -22,7 +22,9 @@ const CodeEditorPage = () => {
   // ✅ Function để tạo tên hiển thị theo format mới
   const createHistoryTitle = (item) => {
     const lang = item.language ? item.language.toUpperCase() : "UNKNOWN";
-    return `Review ${lang} Code #${item.id}`;
+    const type = item.type || "UNKNOWN";
+    const typeText = type === "Re" ? "Review" : type === "Ex" ? "Explain" : type === "Su" ? "Suggest" : "Unknown";
+    return `${typeText} ${lang} Code #${item.id}`;
   };
 
   // ✅ Function để fetch lịch sử (dùng useCallback để fix warning)
