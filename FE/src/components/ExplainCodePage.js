@@ -1,4 +1,5 @@
 
+import React, { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useCode } from "./CodeContext";
 import ExplainSection from "./ExplainSection";
@@ -9,8 +10,15 @@ import axios from "axios";
 
 const ExplainCodePage = () => {
   const navigate = useNavigate();
-  const { code, language, reviewResult, setCode, setReviewResult } = useCode();
+  const { code, language, reviewResult, setCode, setReviewResult, type, setType } = useCode();
   const currentUser = AuthService.getCurrentUser();
+
+  // ✅ Set type khi component load
+  useEffect(() => {
+    if (!type) {
+      setType("Ex"); // Default type cho Explain
+    }
+  }, [type, setType]);
 
   const handleBack = () => navigate("/editor");
   
@@ -64,6 +72,7 @@ const ExplainCodePage = () => {
         reviewSummary: explanationText, // ⚡ lưu vào feedback (BE mapping)
         fixedCode: null,                // ⚡ bỏ code sửa
         language: language || "unknown",
+        type: type || "Ex", // ✅ Thêm type cho Explain
       };
 
       console.log("Payload gửi đi:", JSON.stringify(payload, null, 2));
