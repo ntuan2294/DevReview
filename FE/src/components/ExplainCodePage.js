@@ -86,6 +86,7 @@ const ExplainCodePage = () => {
         const result = await SaveService.saveReview(payload);
         console.log("✅ Lưu lịch sử thành công!", result);
 
+        // ✅ QUAN TRỌNG: Broadcast event để các component khác biết cần refresh
         window.dispatchEvent(
           new CustomEvent("historyUpdated", {
             detail: {
@@ -95,6 +96,7 @@ const ExplainCodePage = () => {
           })
         );
 
+        // ✅ Set flag để CodeEditorPage biết cần refresh (backup method)
         localStorage.setItem("history_needs_refresh", "true");
         localStorage.setItem("last_save_time", Date.now().toString());
 

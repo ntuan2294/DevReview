@@ -11,11 +11,19 @@ import axios from "axios";
 
 const CodeEditorPage = () => {
   const navigate = useNavigate();
-  const { code, setCode, language, setLanguage, setReviewResult, setType } =
-    useCode();
+  const {
+    code,
+    setCode,
+    language,
+    setLanguage,
+    setReviewResult,
+    setType,
+    historyItems,
+    setHistoryItems,
+    isLoadingHistory,
+    setIsLoadingHistory,
+  } = useCode();
   const [loadingAction, setLoadingAction] = useState(null); // "review" | "explain" | null
-  const [historyItems, setHistoryItems] = useState([]);
-  const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const [lastRefreshTime, setLastRefreshTime] = useState(Date.now());
   const [searchTerm, setSearchTerm] = useState("");
   const [languageFilter, setLanguageFilter] = useState("all");
@@ -37,14 +45,14 @@ const CodeEditorPage = () => {
   };
 
   // ✅ Function để fetch lịch sử (dùng useCallback để fix warning)
-  // FIXED: Loại bỏ historyItems.length khỏi dependency để tránh infinite loop
+  // FIXED: Loại bỏ isLoadingHistory khỏi dependency để tránh infinite loop
   const fetchHistory = useCallback(
     async (forceRefresh = false) => {
       try {
         // Chặn gọi lại khi đang loading (trừ khi forceRefresh = true)
         if (!forceRefresh && isLoadingHistory) return;
 
-        setIsLoadingHistory(true); // <-- chỉ gọi 1 lần ở đây
+        setIsLoadingHistory(true);
 
         if (currentUser && currentUser.username) {
           const response = await axios.get(
@@ -73,13 +81,12 @@ const CodeEditorPage = () => {
         }
       } catch (error) {
         console.error("❌ Error fetching history:", error);
-        // FIXED: Không cần kiểm tra historyItems.length ở đây vì có thể gây ra vấn đề
         setHistoryItems([]);
       } finally {
-        setIsLoadingHistory(false); // luôn reset về false sau khi fetch xong
+        setIsLoadingHistory(false);
       }
     },
-    [currentUser, isLoadingHistory] // FIXED: Thêm currentUser vào dependency
+    [currentUser] // Chỉ phụ thuộc vào currentUser
   );
 
   // ✅ Load lịch sử khi component mount
@@ -87,57 +94,19 @@ const CodeEditorPage = () => {
     fetchHistory(true);
   }, [fetchHistory]);
 
-  // ✅ Listen cho custom event từ save action
-  // FIXED: Loại bỏ fetchHistory khỏi dependency để tránh infinite loop
+  // ✅ Chỉ giữ 1 useEffect chính để load lịch sử khi user đăng nhập hoặc khi thực sự cần reload
   useEffect(() => {
-    const handleHistoryUpdated = () => {
-      setTimeout(() => {
-        fetchHistory(true);
-      }, 1000);
-    };
-    window.addEventListener("historyUpdated", handleHistoryUpdated);
-    return () =>
-      window.removeEventListener("historyUpdated", handleHistoryUpdated);
-  }, [fetchHistory]); // FIXED: Cần fetchHistory trong dependency vì sử dụng trong callback
+    if (currentUser?.username) {
+      fetchHistory(true);
+    }
+  }, [currentUser, fetchHistory]);
 
-  // ✅ Kiểm tra localStorage flag định kỳ
-  // FIXED: Loại bỏ fetchHistory khỏi dependency để tránh infinite loop
-  useEffect(() => {
-    const checkRefreshFlag = () => {
-      const needsRefresh = localStorage.getItem("history_needs_refresh");
-      const lastSaveTime = localStorage.getItem("last_save_time");
+  // Nếu muốn reload khi có sự kiện đặc biệt (ví dụ: lưu mới), hãy dùng custom event hoặc nút refresh, KHÔNG cần interval hoặc kiểm tra localStorage liên tục.
 
-      if (needsRefresh === "true" && lastSaveTime) {
-        const saveTime = parseInt(lastSaveTime);
-        const now = Date.now();
-
-        if (now - saveTime < 30000) {
-          fetchHistory(true);
-        } else {
-          localStorage.removeItem("history_needs_refresh");
-          localStorage.removeItem("last_save_time");
-        }
-      }
-    };
-
-    checkRefreshFlag();
-    const interval = setInterval(checkRefreshFlag, 3000);
-    return () => clearInterval(interval);
-  }, [fetchHistory]); // FIXED: Cần fetchHistory trong dependency vì sử dụng trong callback
-
-  // ✅ Listen cho window focus
-  // FIXED: Loại bỏ fetchHistory khỏi dependency để tránh infinite loop
-  useEffect(() => {
-    const handleWindowFocus = () => {
-      const lastRefreshAge = Date.now() - lastRefreshTime;
-      if (lastRefreshAge > 10000) {
-        fetchHistory(true);
-      }
-    };
-
-    window.addEventListener("focus", handleWindowFocus);
-    return () => window.removeEventListener("focus", handleWindowFocus);
-  }, [lastRefreshTime, fetchHistory]); // FIXED: Cần fetchHistory trong dependency vì sử dụng trong callback
+  // XÓA hoặc COMMENT các useEffect sau:
+  // - Kiểm tra localStorage flag định kỳ
+  // - Listen cho window focus
+  // - Listen cho custom event nếu không thực sự cần
 
   // ✅ Manual refresh button handler
   const handleRefreshHistory = () => {

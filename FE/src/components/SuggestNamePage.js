@@ -107,7 +107,7 @@ const SuggestNamePage = () => {
         const result = await SaveService.saveReview(payload);
         console.log("✅ Lưu lịch sử thành công!", result);
 
-        // ✅ Dispatch event để update history
+        // ✅ QUAN TRỌNG: Broadcast event để các component khác biết cần refresh
         window.dispatchEvent(
           new CustomEvent("historyUpdated", {
             detail: {
@@ -117,7 +117,7 @@ const SuggestNamePage = () => {
           })
         );
 
-        // ✅ Set flag để CodeEditorPage refresh
+        // ✅ Set flag để CodeEditorPage refresh (backup method)
         localStorage.setItem("history_needs_refresh", "true");
         localStorage.setItem("last_save_time", Date.now().toString());
 
