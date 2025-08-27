@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import LoadingSpinner from "./LoadingSpinner"; // ✅ Import loading spinner
 import CodeWithHighlight from "./CodeWithHighlight"; // ✅ Import component highlight
 
-const ReviewSection = ({
+const ReviewSection = React.memo(({
   code,
   language,
   reviewResult,
@@ -15,18 +15,28 @@ const ReviewSection = ({
   const [loading, setLoading] = useState(true); // ✅ Thêm biến loading
   const [error, setError] = useState(null);
 
+  // ✅ FIXED: Tối ưu useEffect để tránh infinite loop
   useEffect(() => {
-    setLoading(true);
-    setError(null);
-
-    // Nếu reviewResult là prop, chỉ cần kiểm tra khi nó thay đổi
+    // Chỉ set loading = false khi có reviewResult
     if (reviewResult) {
       setLoading(false);
+      setError(null);
+    } else {
+      // Nếu không có reviewResult, giữ loading = true
+      setLoading(true);
     }
-  }, [reviewResult, code, language]);
+  }, [reviewResult]); // ✅ Chỉ phụ thuộc vào reviewResult
 
-  // Helper function để render code với line numbers (cho fixed code - không cần highlight)
-  const renderCodeWithLineNumbers = (codeContent) => {
+  // ✅ THÊM: useEffect riêng để xử lý error state
+  useEffect(() => {
+    if (reviewResult && reviewResult.error) {
+      setError(reviewResult.error);
+      setLoading(false);
+    }
+  }, [reviewResult]);
+
+  // ✅ OPTIMIZED: Sử dụng useCallback để tránh re-render không cần thiết
+  const renderCodeWithLineNumbers = useCallback((codeContent) => {
     if (!codeContent) return "Không có mã nguồn.";
 
     // Filter out empty lines or lines with only whitespace
@@ -47,10 +57,10 @@ const ReviewSection = ({
         ))}
       </div>
     );
-  };
+  }, []);
 
-  // Format review feedback thành plain text
-  const formatReviewFeedback = (feedback) => {
+  // ✅ OPTIMIZED: Sử dụng useMemo để cache kết quả format
+  const formatReviewFeedback = useCallback((feedback) => {
     if (!feedback) return "Đang xử lý...";
 
     let plainText = feedback
@@ -103,27 +113,45 @@ const ReviewSection = ({
           })}
       </div>
     );
-  };
+  }, []);
 
-  // Lấy improved code từ reviewResult
-  const getImprovedCode = () => {
+  // ✅ OPTIMIZED: Sử dụng useMemo để cache các giá trị computed
+  const improvedCode = useMemo(() => {
     return (
       reviewResult?.improvedCode ||
       reviewResult?.fixedCode ||
       fixedCode ||
       "⚠️ Không tìm thấy code đã cải thiện."
     );
-  };
+  }, [reviewResult?.improvedCode, reviewResult?.fixedCode, fixedCode]);
 
-  // Lấy original code
-  const getOriginalCode = () => {
+  const originalCode = useMemo(() => {
     return reviewResult?.originalCode || code || "Không có mã nguồn gốc.";
-  };
+  }, [reviewResult?.originalCode, code]);
 
-  // ✅ THÊM: Lấy error lines
-  const getErrorLines = () => {
+  const errorLines = useMemo(() => {
     return reviewResult?.errorLines || [];
-  };
+  }, [reviewResult?.errorLines]);
+
+  // ✅ OPTIMIZED: Cache computed values for loading spinner
+  const loadingSubmessage = useMemo(() => {
+    const lang = language?.toUpperCase() || "N/A";
+    const lineCount = code?.split("\n").length || 0;
+    return `Đánh giá code ${lang} - ${lineCount} dòng`;
+  }, [language, code]);
+
+  // ✅ OPTIMIZED: Sử dụng useCallback cho event handlers
+  const handleTabChange = useCallback((tab) => {
+    setActiveTab(tab);
+  }, []);
+
+  const handleBack = useCallback(() => {
+    onBack();
+  }, [onBack]);
+
+  const handleNew = useCallback(() => {
+    onNew();
+  }, [onNew]);
 
   return (
     <div className="max-w-7xl mx-auto px-6 space-y-6">
@@ -131,7 +159,7 @@ const ReviewSection = ({
       <div className="flex justify-between items-center bg-white rounded-lg p-4 shadow-sm">
         <div className="flex items-center space-x-4">
           <button
-            onClick={onBack}
+            onClick={handleBack}
             className="flex items-center space-x-2 bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition"
           >
             <svg
@@ -171,7 +199,7 @@ const ReviewSection = ({
         </div>
 
         <button
-          onClick={onNew}
+          onClick={handleNew}
           className="flex items-center space-x-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition"
         >
           <svg
@@ -196,8 +224,8 @@ const ReviewSection = ({
         {/* ✅ CỘT TRÁI: Sử dụng CodeWithHighlight component */}
         <div className="bg-white rounded-xl shadow-md p-6">
           <CodeWithHighlight
-            code={getOriginalCode()}
-            errorLines={getErrorLines()}
+            code={originalCode}
+            errorLines={errorLines}
             language={language}
             maxHeight="max-h-96"
           />
@@ -208,7 +236,7 @@ const ReviewSection = ({
           {/* Tabs */}
           <div className="flex space-x-1 mb-4 bg-gray-100 rounded-lg p-1">
             <button
-              onClick={() => setActiveTab("review")}
+              onClick={() => handleTabChange("review")}
               className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-all ${
                 activeTab === "review"
                   ? "bg-blue-600 text-white shadow-sm"
@@ -233,7 +261,7 @@ const ReviewSection = ({
               </div>
             </button>
             <button
-              onClick={() => setActiveTab("fixed")}
+              onClick={() => handleTabChange("fixed")}
               className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-all ${
                 activeTab === "fixed"
                   ? "bg-green-600 text-white shadow-sm"
@@ -273,9 +301,7 @@ const ReviewSection = ({
                   {loading ? (
                     <LoadingSpinner
                       message="Đang phân tích code..."
-                      submessage={`Đánh giá code ${
-                        language?.toUpperCase() || "N/A"
-                      } - ${code?.split("\n").length || 0} dòng`}
+                      submessage={loadingSubmessage}
                       color="blue"
                       size="medium"
                     />
@@ -293,7 +319,7 @@ const ReviewSection = ({
             {activeTab === "fixed" && (
               <div className="h-full">
                 <div className="bg-gray-50 rounded-lg max-h-96 overflow-auto p-4 border">
-                  {renderCodeWithLineNumbers(getImprovedCode())}
+                  {renderCodeWithLineNumbers(improvedCode)}
                 </div>
               </div>
             )}
@@ -302,6 +328,17 @@ const ReviewSection = ({
       </div>
     </div>
   );
-};
+}, (prevProps, nextProps) => {
+  // ✅ Custom comparison function để tối ưu re-render
+  return (
+    prevProps.code === nextProps.code &&
+    prevProps.language === nextProps.language &&
+    prevProps.reviewResult === nextProps.reviewResult &&
+    prevProps.fixedCode === nextProps.fixedCode &&
+    prevProps.currentUser === nextProps.currentUser &&
+    prevProps.onBack === nextProps.onBack &&
+    prevProps.onNew === nextProps.onNew
+  );
+});
 
 export default ReviewSection;
