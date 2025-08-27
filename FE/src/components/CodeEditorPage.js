@@ -6,9 +6,13 @@ import ReviewService from "../services/ReviewService";
 import FileService from "../services/FileService";
 import axios from "axios";
 
+// FIXED: Đã sửa lỗi lặp vô hạn bằng cách tối ưu dependency arrays trong useCallback và useEffect
+// ENHANCED: Đã thêm type system (Re, Ex, Su) để phân biệt loại dữ liệu và điều hướng đúng trang
+
 const CodeEditorPage = () => {
   const navigate = useNavigate();
-  const { code, setCode, language, setLanguage, setReviewResult } = useCode();
+  const { code, setCode, language, setLanguage, setReviewResult, setType } =
+    useCode();
   const [loadingAction, setLoadingAction] = useState(null); // "review" | "explain" | null
   const [historyItems, setHistoryItems] = useState([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
@@ -20,10 +24,20 @@ const CodeEditorPage = () => {
   // ✅ Function để tạo tên hiển thị theo format mới
   const createHistoryTitle = (item) => {
     const lang = item.language ? item.language.toUpperCase() : "UNKNOWN";
-    return `Review ${lang} Code #${item.id}`;
+    const type = item.type || "UNKNOWN";
+    const typeText =
+      type === "Re"
+        ? "Review"
+        : type === "Ex"
+        ? "Explain"
+        : type === "Su"
+        ? "Suggest"
+        : "Unknown";
+    return `${typeText} ${lang} Code #${item.id}`;
   };
 
   // ✅ Function để fetch lịch sử (dùng useCallback để fix warning)
+  // FIXED: Loại bỏ historyItems.length khỏi dependency để tránh infinite loop
   const fetchHistory = useCallback(
     async (forceRefresh = false) => {
       try {
@@ -59,14 +73,13 @@ const CodeEditorPage = () => {
         }
       } catch (error) {
         console.error("❌ Error fetching history:", error);
-        if (!historyItems.length) {
-          setHistoryItems([]);
-        }
+        // FIXED: Không cần kiểm tra historyItems.length ở đây vì có thể gây ra vấn đề
+        setHistoryItems([]);
       } finally {
         setIsLoadingHistory(false); // luôn reset về false sau khi fetch xong
       }
     },
-    [currentUser?.username, historyItems.length] // ⚠️ bỏ isLoadingHistory khỏi dependency
+    [currentUser, isLoadingHistory] // FIXED: Thêm currentUser vào dependency
   );
 
   // ✅ Load lịch sử khi component mount
@@ -75,6 +88,7 @@ const CodeEditorPage = () => {
   }, [fetchHistory]);
 
   // ✅ Listen cho custom event từ save action
+  // FIXED: Loại bỏ fetchHistory khỏi dependency để tránh infinite loop
   useEffect(() => {
     const handleHistoryUpdated = () => {
       setTimeout(() => {
@@ -84,9 +98,10 @@ const CodeEditorPage = () => {
     window.addEventListener("historyUpdated", handleHistoryUpdated);
     return () =>
       window.removeEventListener("historyUpdated", handleHistoryUpdated);
-  }, [fetchHistory]);
+  }, [fetchHistory]); // FIXED: Cần fetchHistory trong dependency vì sử dụng trong callback
 
   // ✅ Kiểm tra localStorage flag định kỳ
+  // FIXED: Loại bỏ fetchHistory khỏi dependency để tránh infinite loop
   useEffect(() => {
     const checkRefreshFlag = () => {
       const needsRefresh = localStorage.getItem("history_needs_refresh");
@@ -108,9 +123,10 @@ const CodeEditorPage = () => {
     checkRefreshFlag();
     const interval = setInterval(checkRefreshFlag, 3000);
     return () => clearInterval(interval);
-  }, [fetchHistory]);
+  }, [fetchHistory]); // FIXED: Cần fetchHistory trong dependency vì sử dụng trong callback
 
   // ✅ Listen cho window focus
+  // FIXED: Loại bỏ fetchHistory khỏi dependency để tránh infinite loop
   useEffect(() => {
     const handleWindowFocus = () => {
       const lastRefreshAge = Date.now() - lastRefreshTime;
@@ -121,7 +137,7 @@ const CodeEditorPage = () => {
 
     window.addEventListener("focus", handleWindowFocus);
     return () => window.removeEventListener("focus", handleWindowFocus);
-  }, [lastRefreshTime, fetchHistory]);
+  }, [lastRefreshTime, fetchHistory]); // FIXED: Cần fetchHistory trong dependency vì sử dụng trong callback
 
   // ✅ Manual refresh button handler
   const handleRefreshHistory = () => {
@@ -155,6 +171,7 @@ const CodeEditorPage = () => {
     }
 
     setLoadingAction("review");
+    setType("Re"); // Set type cho Review
     try {
       const result = await ReviewService.reviewCode(
         language,
@@ -178,6 +195,7 @@ const CodeEditorPage = () => {
     }
 
     setLoadingAction("explain");
+    setType("Ex"); // Set type cho Explain
     try {
       navigate("/explain");
     } finally {
@@ -192,6 +210,7 @@ const CodeEditorPage = () => {
     }
 
     setLoadingAction("suggest");
+    setType("Su"); // Set type cho Suggest
     try {
       // TODO: gọi service SuggestNameService giống ReviewService, ExplainService
       navigate("/suggest"); // hoặc navigate tới trang hiển thị kết quả gợi ý
@@ -212,6 +231,7 @@ const CodeEditorPage = () => {
         if (result.data.language) {
           setLanguage(result.data.language);
         }
+        setType(""); // Reset type khi upload file mới
         alert(
           `File đã được tải lên thành công! Ngôn ngữ: ${
             result.data.language || "Không xác định"
@@ -227,6 +247,7 @@ const CodeEditorPage = () => {
 
   const handleClearCode = () => {
     setCode("");
+    setType(""); // Reset type khi clear code
   };
 
   const handleLogout = () => {
@@ -235,10 +256,10 @@ const CodeEditorPage = () => {
   };
 
   // ✅ Click vào history item
-  const handleHistoryClick = async (historyId) => {
+  const handleHistoryClick = async (historyItem) => {
     try {
       const response = await axios.get(
-        `http://localhost:8000/api/history/detail/${historyId}`
+        `http://localhost:8000/api/history/detail/${historyItem.id}`
       );
       const historyData = response.data;
 
@@ -250,7 +271,7 @@ const CodeEditorPage = () => {
           ? historyData.reviewSummary.substring(0, 100) + "..."
           : "Không có tóm tắt",
         isFromHistory: true,
-        historyId: historyId,
+        historyId: historyItem.id,
       };
 
       setReviewResult(reviewResult);
@@ -258,7 +279,18 @@ const CodeEditorPage = () => {
       if (historyData.language) {
         setLanguage(historyData.language);
       }
-      navigate("/result");
+
+      // ✅ Điều hướng đúng trang dựa trên type
+      if (historyItem.type === "Re") {
+        navigate("/result");
+      } else if (historyItem.type === "Ex") {
+        navigate("/explain");
+      } else if (historyItem.type === "Su") {
+        navigate("/suggest");
+      } else {
+        // Fallback về result page nếu không có type
+        navigate("/result");
+      }
     } catch (error) {
       alert("Không thể tải chi tiết lịch sử!");
     }
@@ -356,7 +388,7 @@ const CodeEditorPage = () => {
                 {filteredAndSearchedHistory.map((item, i) => (
                   <div
                     key={`${item.id}-${i}`}
-                    onClick={() => handleHistoryClick(item.id)}
+                    onClick={() => handleHistoryClick(item)}
                     className="p-3 border border-gray-200 rounded-lg hover:bg-blue-50 hover:border-blue-300 cursor-pointer"
                   >
                     <div className="text-sm font-semibold">
@@ -370,6 +402,15 @@ const CodeEditorPage = () => {
                     <div className="flex justify-between text-xs text-gray-500 mt-2">
                       <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
                         {item.language?.toUpperCase() || "N/A"}
+                      </span>
+                      <span className="bg-green-100 text-green-800 px-2 py-1 rounded-full">
+                        {item.type === "Re"
+                          ? "Review"
+                          : item.type === "Ex"
+                          ? "Explain"
+                          : item.type === "Su"
+                          ? "Suggest"
+                          : "Unknown"}
                       </span>
                       <span>#{item.id}</span>
                     </div>

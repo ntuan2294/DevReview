@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import ExplainService from "../services/ExplainService";
-import LoadingSpinner from "./LoadingSpinner"; // ✅ Import component loading thống nhất
+import LoadingSpinner from "./LoadingSpinner"; // ✅ Import loading spinner
 
 const ExplainSection = ({ code, language, currentUser, onBack, onNew }) => {
   const [explanation, setExplanation] = useState(null);
@@ -9,13 +9,16 @@ const ExplainSection = ({ code, language, currentUser, onBack, onNew }) => {
   // Render code with line numbers
   const renderCodeWithLineNumbers = (codeContent) => {
     if (!codeContent) return "Không có mã nguồn.";
+
+    // Filter out empty lines or lines with only whitespace
     const lines = codeContent.split("\n");
+
     return (
       <div className="font-mono text-sm">
         {lines.map((line, idx) => (
-          <div key={idx} className="flex">
+          <div key={idx} className="flex hover:bg-gray-100">
             <span
-              className="text-gray-400 select-none pr-4 text-right"
+              className="text-gray-400 select-none pr-4 text-right flex-shrink-0"
               style={{ minWidth: "3rem" }}
             >
               {idx + 1}
@@ -27,49 +30,48 @@ const ExplainSection = ({ code, language, currentUser, onBack, onNew }) => {
     );
   };
 
-  // Format explanation thành plain text
   const formatExplanation = (text) => {
     if (!text) return "Đang xử lý...";
 
-    // Loại bỏ markdown formatting và chỉ hiển thị text thuần
     let plainText = text
-      // Loại bỏ code blocks
       .replace(/```[\s\S]*?```/g, "[Code ví dụ đã được loại bỏ]")
-      // Loại bỏ inline code
       .replace(/`([^`]+)`/g, "$1")
-      // Loại bỏ headers nhưng giữ lại nội dung
       .replace(/^#{1,6}\s*/gm, "")
-      // Loại bỏ bold/italic nhưng giữ lại nội dung
       .replace(/\*\*(.*?)\*\*/g, "$1")
       .replace(/\*(.*?)\*/g, "$1")
-      // Chuyển bullet points thành ký tự đơn giản
       .replace(/^\s*[-*+]\s*/gm, "• ")
-      // Loại bỏ numbered lists markers
       .replace(/^\s*\d+\.\s*/gm, "")
-      // Chuẩn hóa line breaks
-      .replace(/\n\s*\n/g, "\n\n")
+      // ✅ ENHANCED: Better empty line handling
+      .replace(/\n\s*\n\s*\n+/g, "\n\n")
+      .replace(/^\s*$/gm, "")
+      .replace(/\n+/g, "\n")
       .trim();
 
     return (
-      <div className="text-gray-800 leading-relaxed">
-        {plainText.split("\n").map((line, idx) => {
-          // Tạo style khác nhau cho các loại dòng
-          const isHeader = line.includes(":") && line.length < 100;
-          const isBullet = line.startsWith("• ");
+      <div className="text-gray-800 leading-relaxed space-y-3">
+        {plainText
+          .split("\n")
+          .filter((line) => line.trim())
+          .map((line, idx) => {
+            const isHeader = line.includes(":") && line.length < 100;
+            const isBullet = line.startsWith("• ");
 
-          return (
-            <p
-              key={idx}
-              className={`
-                ${line.trim() ? "mb-3" : "mb-4"}
-                ${isHeader ? "font-semibold text-blue-700 text-lg" : ""}
-                ${isBullet ? "ml-4 mb-2" : ""}
-              `}
-            >
-              {line || "\u00A0"}
-            </p>
-          );
-        })}
+            return (
+              <p
+                key={idx}
+                className={`
+              ${
+                isHeader
+                  ? "font-semibold text-blue-700 text-lg border-b border-blue-200 pb-1"
+                  : ""
+              }
+              ${isBullet ? "ml-4" : ""}
+            `}
+              >
+                {line}
+              </p>
+            );
+          })}
       </div>
     );
   };
@@ -165,19 +167,20 @@ const ExplainSection = ({ code, language, currentUser, onBack, onNew }) => {
         {/* Right: Explanation */}
         <div className="bg-white rounded-xl shadow-md p-6 flex flex-col">
           <h2 className="text-lg font-semibold mb-4">📖 Giải thích chi tiết</h2>
-          <div className="bg-gray-50 p-4 rounded-lg border flex-1 overflow-auto max-h-[500px]">
+          <div className="bg-green-50 border border-green-200 rounded-lg flex-1 overflow-hidden">
             {loading ? (
-              // ✅ THAY ĐỔI: Sử dụng LoadingSpinner component thống nhất
               <LoadingSpinner
-                message="Đang giải thích code..."
-                submessage={`Phân tích ${language?.toUpperCase() || "N/A"} - ${
-                  code?.split("\n").length || 0
-                } dòng`}
-                color="blue"
+                message="Đang phân tích code..."
+                submessage={`Giải thích code ${
+                  language?.toUpperCase() || "N/A"
+                } - ${code?.split("\n").length || 0} dòng`}
+                color="green"
                 size="medium"
               />
             ) : (
-              formatExplanation(explanation)
+              <div className="p-4 overflow-auto max-h-[500px]">
+                {formatExplanation(explanation)}
+              </div>
             )}
           </div>
         </div>

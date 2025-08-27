@@ -1,3 +1,4 @@
+import React, { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useCode } from "./CodeContext";
 import SuggestSection from "./SuggestSection"; // ✅ Chính xác
@@ -8,8 +9,23 @@ import axios from "axios";
 
 const SuggestNamePage = () => {
   const navigate = useNavigate();
-  const { code, language, reviewResult, setCode, setReviewResult } = useCode();
+  const {
+    code,
+    language,
+    reviewResult,
+    setCode,
+    setReviewResult,
+    type,
+    setType,
+  } = useCode();
   const currentUser = AuthService.getCurrentUser();
+
+  // ✅ Set type khi component load
+  useEffect(() => {
+    if (!type) {
+      setType("Su"); // Default type cho Suggest
+    }
+  }, [type, setType]);
 
   const handleBack = () => navigate("/editor");
 
@@ -80,6 +96,7 @@ const SuggestNamePage = () => {
           reviewSummary: suggestionText, // ⚡ lưu gợi ý vào reviewSummary
           fixedCode: null, // ⚡ suggest không có fixed code
           language: language || "unknown",
+          type: type || "Su", // ✅ Thêm type cho Suggest
         };
 
         console.log("📦 Payload để lưu:", {

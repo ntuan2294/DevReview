@@ -125,4 +125,18 @@ public class ReviewHistoryService {
 
         return String.format("Review %s Code #%d%s", language, history.getId(), errorInfo);
     }
+
+    public void saveHistoryWithSuggest(User user, String code, String summary, String fixedCode, String language,
+            String suggest) {
+        ReviewHistory history = new ReviewHistory();
+        history.setUser(user);
+        history.setOriginalCode(code);
+        history.setReviewSummary(summary);
+        history.setFixedCode(fixedCode);
+        history.setLanguage(language);
+        history.setSuggest(suggest);
+        history.setCreatedAt(java.time.LocalDateTime.now());
+        // Lưu vào repository
+        reviewHistoryRepository.save(history);
+    }
 }

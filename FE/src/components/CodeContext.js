@@ -6,9 +6,21 @@ export const CodeProvider = ({ children }) => {
   const [code, setCode] = useState("");
   const [language, setLanguage] = useState("python");
   const [reviewResult, setReviewResult] = useState(null);
+  const [type, setType] = useState(""); // "Re" for Review, "Ex" for Explain, "Su" for Suggest
 
   return (
-    <CodeContext.Provider value={{ code, setCode, language, setLanguage, reviewResult, setReviewResult }}>
+    <CodeContext.Provider
+      value={{
+        code,
+        setCode,
+        language,
+        setLanguage,
+        reviewResult,
+        setReviewResult,
+        type,
+        setType,
+      }}
+    >
       {children}
     </CodeContext.Provider>
   );

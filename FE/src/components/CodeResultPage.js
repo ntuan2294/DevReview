@@ -1,5 +1,5 @@
 // CodeResultPage.js - Updated to handle error lines
-import React from "react";
+import React, { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useCode } from "./CodeContext";
 import ReviewSection from "./ReviewSection";
@@ -9,8 +9,23 @@ import axios from "axios";
 
 const CodeResultPage = () => {
   const navigate = useNavigate();
-  const { code, language, reviewResult, setCode, setReviewResult } = useCode();
+  const {
+    code,
+    language,
+    reviewResult,
+    setCode,
+    setReviewResult,
+    type,
+    setType,
+  } = useCode();
   const currentUser = AuthService.getCurrentUser();
+
+  // ✅ Set type khi component load
+  useEffect(() => {
+    if (!type) {
+      setType("Re"); // Default type cho Review
+    }
+  }, [type, setType]);
 
   const handleBack = () => navigate("/editor");
 
@@ -70,6 +85,7 @@ const CodeResultPage = () => {
           fixedCode: reviewResult.improvedCode || reviewResult.fixedCode || "",
           language: language || "unknown",
           errorLines: reviewResult.errorLines || [], // ✅ THÊM error lines
+          type: type || "Re", // ✅ Thêm type cho Review
         };
 
         console.log("Payload gửi đi:", JSON.stringify(payload, null, 2));

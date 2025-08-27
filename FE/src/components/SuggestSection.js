@@ -10,13 +10,16 @@ const SuggestSection = ({ code, language, currentUser, onBack, onNew }) => {
   // Render code with line numbers
   const renderCodeWithLineNumbers = (codeContent) => {
     if (!codeContent) return "Không có mã nguồn.";
+
+    // Filter out empty lines or lines with only whitespace
     const lines = codeContent.split("\n");
+
     return (
       <div className="font-mono text-sm">
         {lines.map((line, idx) => (
-          <div key={idx} className="flex">
+          <div key={idx} className="flex hover:bg-gray-100">
             <span
-              className="text-gray-400 select-none pr-4 text-right"
+              className="text-gray-400 select-none pr-4 text-right flex-shrink-0"
               style={{ minWidth: "3rem" }}
             >
               {idx + 1}
@@ -32,60 +35,55 @@ const SuggestSection = ({ code, language, currentUser, onBack, onNew }) => {
   const formatSuggestions = (text) => {
     if (!text) return "Đang xử lý...";
 
-    // Loại bỏ markdown formatting và chỉ hiển thị text thuần
     let plainText = text
-      // Loại bỏ code blocks hoàn toàn
       .replace(/```[\s\S]*?```/g, "[Code ví dụ đã được loại bỏ]")
-      // Loại bỏ inline code nhưng giữ nội dung
       .replace(/`([^`]+)`/g, "$1")
-      // Loại bỏ headers nhưng giữ lại nội dung và làm nổi bật
       .replace(/^#{1,6}\s*/gm, "")
-      // Loại bỏ bold/italic nhưng giữ lại nội dung
       .replace(/\*\*(.*?)\*\*/g, "$1")
       .replace(/\*(.*?)\*/g, "$1")
-      // Chuyển bullet points thành ký tự đơn giản
       .replace(/^\s*[-*+]\s*/gm, "• ")
-      // Loại bỏ numbered lists markers nhưng giữ nội dung
       .replace(/^\s*\d+\.\s*/gm, "")
-      // Chuẩn hóa line breaks
-      .replace(/\n\s*\n/g, "\n\n")
+      // ✅ ENHANCED: Better empty line handling
+      .replace(/\n\s*\n\s*\n+/g, "\n\n")
+      .replace(/^\s*$/gm, "")
+      .replace(/\n+/g, "\n")
       .trim();
 
     return (
-      <div className="text-gray-800 leading-relaxed">
-        {plainText.split("\n").map((line, idx) => {
-          // Tạo style khác nhau cho các loại dòng
-          const isMainHeader =
-            line.includes("Gợi ý tên") ||
-            line.includes("Quy tắc đặt tên") ||
-            line.includes("Nhiệm vụ");
-          const isSubHeader =
-            line.includes(":") && line.length < 100 && !line.startsWith("• ");
-          const isBullet = line.startsWith("• ");
-          const isEmpty = !line.trim();
+      <div className="text-gray-800 leading-relaxed space-y-3">
+        {plainText
+          .split("\n")
+          .filter((line) => line.trim())
+          .map((line, idx) => {
+            const isMainHeader =
+              line.includes("Gợi ý tên") ||
+              line.includes("Quy tắc đặt tên") ||
+              line.includes("Nhiệm vụ");
+            const isSubHeader =
+              line.includes(":") && line.length < 100 && !line.startsWith("• ");
+            const isBullet = line.startsWith("• ");
 
-          return (
-            <p
-              key={idx}
-              className={`
-                ${isEmpty ? "mb-4" : "mb-3"}
-                ${
-                  isMainHeader
-                    ? "font-bold text-orange-700 text-xl border-b border-orange-200 pb-2 mb-4"
-                    : ""
-                }
-                ${
-                  isSubHeader && !isMainHeader
-                    ? "font-semibold text-orange-600 text-lg mt-4 mb-2"
-                    : ""
-                }
-                ${isBullet ? "ml-4 mb-2 text-gray-700" : ""}
-              `}
-            >
-              {line || "\u00A0"}
-            </p>
-          );
-        })}
+            return (
+              <p
+                key={idx}
+                className={`
+              ${
+                isMainHeader
+                  ? "font-bold text-orange-700 text-xl border-b border-orange-200 pb-2"
+                  : ""
+              }
+              ${
+                isSubHeader && !isMainHeader
+                  ? "font-semibold text-orange-600 text-lg mt-2"
+                  : ""
+              }
+              ${isBullet ? "ml-4 text-gray-700" : ""}
+            `}
+              >
+                {line}
+              </p>
+            );
+          })}
       </div>
     );
   };
@@ -257,7 +255,7 @@ const SuggestSection = ({ code, language, currentUser, onBack, onNew }) => {
 
           <div className="bg-orange-50 border border-orange-200 rounded-lg flex-1 overflow-hidden">
             {loading ? (
-              // ✅ THAY ĐỔI: Sử dụng LoadingSpinner component thống nhất
+              // ✅ Sử dụng LoadingSpinner component thống nhất
               <LoadingSpinner
                 message="Đang phân tích code..."
                 submessage={`Gợi ý tên cho ${

@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import LoadingSpinner from "./LoadingSpinner";
+import React, { useState, useEffect } from "react";
+import LoadingSpinner from "./LoadingSpinner"; // ✅ Import loading spinner
 import CodeWithHighlight from "./CodeWithHighlight"; // ✅ Import component highlight
 
 const ReviewSection = ({
@@ -12,18 +12,32 @@ const ReviewSection = ({
   onNew,
 }) => {
   const [activeTab, setActiveTab] = useState("review"); // 'review' | 'fixed'
+  const [loading, setLoading] = useState(true); // ✅ Thêm biến loading
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    setLoading(true);
+    setError(null);
+
+    // Nếu reviewResult là prop, chỉ cần kiểm tra khi nó thay đổi
+    if (reviewResult) {
+      setLoading(false);
+    }
+  }, [reviewResult, code, language]);
 
   // Helper function để render code với line numbers (cho fixed code - không cần highlight)
   const renderCodeWithLineNumbers = (codeContent) => {
     if (!codeContent) return "Không có mã nguồn.";
 
+    // Filter out empty lines or lines with only whitespace
     const lines = codeContent.split("\n");
+
     return (
       <div className="font-mono text-sm">
         {lines.map((line, idx) => (
-          <div key={idx} className="flex">
+          <div key={idx} className="flex hover:bg-gray-100">
             <span
-              className="text-gray-400 select-none pr-4 text-right"
+              className="text-gray-400 select-none pr-4 text-right flex-shrink-0"
               style={{ minWidth: "3rem" }}
             >
               {idx + 1}
@@ -39,32 +53,54 @@ const ReviewSection = ({
   const formatReviewFeedback = (feedback) => {
     if (!feedback) return "Đang xử lý...";
 
-    // Loại bỏ markdown formatting và chỉ hiển thị text thuần
     let plainText = feedback
-      // Loại bỏ code blocks
+      // Remove code blocks
       .replace(/```[\s\S]*?```/g, "[Code đã được loại bỏ]")
-      // Loại bỏ inline code
+      // Remove inline code but keep content
       .replace(/`([^`]+)`/g, "$1")
-      // Loại bỏ headers
+      // Remove markdown headers but keep content
       .replace(/^#{1,6}\s*/gm, "")
-      // Loại bỏ bold/italic
+      // Remove bold/italic but keep content
       .replace(/\*\*(.*?)\*\*/g, "$1")
       .replace(/\*(.*?)\*/g, "$1")
-      // Loại bỏ bullet points
+      // Convert bullet points to simple characters
       .replace(/^\s*[-*+]\s*/gm, "• ")
-      // Loại bỏ numbered lists
+      // Remove numbered list markers but keep content
       .replace(/^\s*\d+\.\s*/gm, "")
-      // Chuẩn hóa line breaks
-      .replace(/\n\s*\n/g, "\n\n")
+      // ✅ ENHANCED: Remove excessive empty lines
+      .replace(/\n\s*\n\s*\n+/g, "\n\n") // Multiple empty lines -> double
+      .replace(/^\s*$/gm, "") // Remove pure empty lines
+      .replace(/\n+/g, "\n") // Multiple newlines -> single
       .trim();
 
     return (
-      <div className="text-gray-800 leading-relaxed">
-        {plainText.split("\n").map((line, idx) => (
-          <p key={idx} className={`${line.trim() ? "mb-2" : "mb-4"}`}>
-            {line || "\u00A0"} {/* Non-breaking space for empty lines */}
-          </p>
-        ))}
+      <div className="text-gray-800 leading-relaxed space-y-3">
+        {plainText
+          .split("\n")
+          .filter((line) => line.trim())
+          .map((line, idx) => {
+            const isBullet = line.startsWith("• ");
+            const isImportant =
+              line.includes("Lỗi") ||
+              line.includes("Error") ||
+              line.includes("❌");
+
+            return (
+              <p
+                key={idx}
+                className={`
+              ${isBullet ? "ml-4" : ""}
+              ${
+                isImportant
+                  ? "font-semibold text-red-700 bg-red-50 p-2 rounded"
+                  : ""
+              }
+            `}
+              >
+                {line}
+              </p>
+            );
+          })}
       </div>
     );
   };
@@ -234,17 +270,21 @@ const ReviewSection = ({
             {activeTab === "review" && (
               <div className="h-full">
                 <div className="bg-gray-50 p-4 rounded-lg max-h-96 overflow-auto border">
-                  {reviewResult ? (
-                    formatReviewFeedback(reviewResult.feedback)
-                  ) : (
+                  {loading ? (
                     <LoadingSpinner
                       message="Đang phân tích code..."
-                      submessage={`Ngôn ngữ: ${
+                      submessage={`Đánh giá code ${
                         language?.toUpperCase() || "N/A"
-                      }`}
+                      } - ${code?.split("\n").length || 0} dòng`}
                       color="blue"
                       size="medium"
                     />
+                  ) : error ? (
+                    <div className="text-red-600 p-4">{error}</div>
+                  ) : (
+                    <div className="p-4 overflow-auto max-h-[500px]">
+                      {formatReviewFeedback(reviewResult?.feedback)}
+                    </div>
                   )}
                 </div>
               </div>

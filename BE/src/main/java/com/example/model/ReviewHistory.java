@@ -146,4 +146,9 @@ public class ReviewHistory {
                 ", userId=" + (user != null ? user.getId() : null) +
                 '}';
     }
+
+    public void setSuggest(String suggest) {
+
+        throw new UnsupportedOperationException("Unimplemented method 'setSuggest'");
+    }
 }
