@@ -7,6 +7,8 @@ export const CodeProvider = ({ children }) => {
   const [language, setLanguage] = useState("python");
   const [reviewResult, setReviewResult] = useState(null);
   const [type, setType] = useState(""); // "Re" for Review, "Ex" for Explain, "Su" for Suggest
+  const [historyItems, setHistoryItems] = useState([]); // ✅ Thêm historyItems vào context
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false); // ✅ Thêm loading state
 
   return (
     <CodeContext.Provider
@@ -19,6 +21,10 @@ export const CodeProvider = ({ children }) => {
         setReviewResult,
         type,
         setType,
+        historyItems,
+        setHistoryItems,
+        isLoadingHistory,
+        setIsLoadingHistory,
       }}
     >
       {children}

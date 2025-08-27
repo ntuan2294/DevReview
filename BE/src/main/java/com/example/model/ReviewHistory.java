@@ -36,6 +36,10 @@ public class ReviewHistory {
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
+    // ✅ THÊM: Field suggest để lưu gợi ý tên
+    @Column(name = "suggest", columnDefinition = "TEXT")
+    private String suggest;
+
     @PrePersist
     protected void onCreate() {
         this.createdAt = LocalDateTime.now();
@@ -135,6 +139,15 @@ public class ReviewHistory {
         this.createdAt = createdAt;
     }
 
+    // ✅ THÊM: Getter/Setter cho suggest
+    public String getSuggest() {
+        return suggest;
+    }
+
+    public void setSuggest(String suggest) {
+        this.suggest = suggest;
+    }
+
     // ✅ toString() tránh circular reference
     @Override
     public String toString() {
@@ -145,10 +158,5 @@ public class ReviewHistory {
                 ", createdAt=" + createdAt +
                 ", userId=" + (user != null ? user.getId() : null) +
                 '}';
-    }
-
-    public void setSuggest(String suggest) {
-
-        throw new UnsupportedOperationException("Unimplemented method 'setSuggest'");
     }
 }

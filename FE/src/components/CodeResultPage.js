@@ -103,7 +103,7 @@ const CodeResultPage = () => {
           })
         );
 
-        // ✅ Set flag để CodeEditorPage biết cần refresh
+        // ✅ Set flag để CodeEditorPage biết cần refresh (backup method)
         localStorage.setItem("history_needs_refresh", "true");
         localStorage.setItem("last_save_time", Date.now().toString());
 
