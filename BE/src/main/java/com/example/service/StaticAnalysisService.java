@@ -1,45 +1,81 @@
 package com.example.service;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
+import java.util.*;
+import java.util.regex.*;
 
 public class StaticAnalysisService {
 
-    public static String reviewCode(String language, String code) throws IOException, InterruptedException {
-        Path tempFile = Files.createTempFile("code", getExtension(language));
-        Files.writeString(tempFile, code);
+    public static class Issue {
+        public String type;
+        public int line;
+        public int col;
+        public String code;
+        public String message;
 
-        String command = getCommand(language, tempFile.toString());
+        public Issue(String type, int line, int col, String code, String message) {
+            this.type = type;
+            this.line = line;
+            this.col = col;
+            this.code = code;
+            this.message = message;
+        }
+    }
 
-        Process process = Runtime.getRuntime().exec(command);
-        int exitCode = process.waitFor();
+    private static final Pattern PYLINT_PATTERN =
+        Pattern.compile(".*:(\\d+):(\\d+): ([EW]\\d{4}): (.*)");
+    private static final Pattern MYPY_PATTERN =
+        Pattern.compile(".*:(\\d+): (error): (.*)  \\[(.*)\\]");
 
-        String output = new String(process.getInputStream().readAllBytes());
-        String error = new String(process.getErrorStream().readAllBytes());
-
-        if (exitCode != 0) {
-            return "Lỗi khi phân tích code:\n" + error;
+    public static List<Issue> reviewCode(String language, String code)
+            throws IOException, InterruptedException {
+        if (!"python".equalsIgnoreCase(language)) {
+            return Collections.emptyList();
         }
 
-        return output.isEmpty() ? "Không có lỗi được phát hiện." : output;
-    }
+        List<Issue> issues = new ArrayList<>();
 
-    private static String getExtension(String language) {
-        return switch (language.toLowerCase()) {
-            case "java" -> ".java";
-            case "python" -> ".py";
-            case "cpp", "c++" -> ".cpp";
-            default -> ".txt";
-        };
-    }
+        // 1. Pylint
+        for (String line : PythonAnalyzer.runPylint(code)) {
+            Matcher m = PYLINT_PATTERN.matcher(line);
+            if (m.matches()) {
+                issues.add(new Issue(
+                    m.group(3).startsWith("E") ? "ERROR" : "WARNING",
+                    Integer.parseInt(m.group(1)),
+                    Integer.parseInt(m.group(2)),
+                    m.group(3),
+                    m.group(4)
+                ));
+            }
+        }
 
-    private static String getCommand(String language, String filePath) {
-        return switch (language.toLowerCase()) {
-            case "java" -> "checkstyle -c /google_checks.xml " + filePath;
-            case "python" -> "pylint " + filePath;
-            case "cpp", "c++" -> "cppcheck " + filePath;
-            default -> "echo 'Ngôn ngữ không được hỗ trợ'";
-        };
+        // 2. Mypy
+        for (String line : PythonAnalyzer.runMypy(code)) {
+            Matcher m = MYPY_PATTERN.matcher(line);
+            if (m.matches()) {
+                issues.add(new Issue(
+                    "ERROR",
+                    Integer.parseInt(m.group(1)),
+                    0,
+                    m.group(4),
+                    m.group(3)
+                ));
+            }
+        }
+
+        // 3. CrossHair
+        for (String line : PythonAnalyzer.runCrosshair(code)) {
+            if (line.contains("Counterexample")) {
+                issues.add(new Issue(
+                    "LOGIC",
+                    0,
+                    0,
+                    "CrossHair",
+                    line.trim()
+                ));
+            }
+        }
+
+        return issues;
     }
 }

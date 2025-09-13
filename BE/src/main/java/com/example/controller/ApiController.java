@@ -10,6 +10,7 @@ import com.example.service.AIService;
 import com.example.service.ExplainService;
 import com.example.service.ReviewHistoryService;
 import com.example.service.StaticAnalysisService;
+import com.example.service.StaticAnalysisService.Issue;
 import com.example.service.UserService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.example.service.SuggestNameService; // ✅ THÊM import này
@@ -29,9 +30,6 @@ public class ApiController {
 
     @Autowired
     private UserService userService;
-
-    @Autowired
-    private AIService aiService;
 
     @Autowired
     private UserRepository userRepository;
@@ -88,10 +86,11 @@ public class ApiController {
     public Map<String, Object> review(@RequestBody ReviewRequest req) {
         Map<String, Object> res = new HashMap<>();
         try {
-            String feedback = StaticAnalysisService.reviewCode(req.getLanguage(), req.getCode());
+            List<Issue> feedback = StaticAnalysisService.reviewCode(req.getLanguage(), req.getCode());
             res.put("success", true);
             res.put("feedback", feedback);
         } catch (Exception e) {
+            e.printStackTrace();
             res.put("success", false);
             res.put("error", e.getClass().getSimpleName());
             res.put("message", e.getMessage());

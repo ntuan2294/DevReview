@@ -1,4 +1,4 @@
-// CodeResultPage.js - Updated to handle error lines
+// CodeResultPage.js
 import React, { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useCode } from "./CodeContext";
@@ -20,7 +20,7 @@ const CodeResultPage = () => {
   } = useCode();
   const currentUser = AuthService.getCurrentUser();
 
-  // ✅ Set type khi component load
+  // Set type mặc định
   useEffect(() => {
     if (!type) {
       setType("Re"); // Default type cho Review
@@ -30,53 +30,30 @@ const CodeResultPage = () => {
   const handleBack = () => navigate("/editor");
 
   const handleNew = async () => {
-    console.log("=== BẮT ĐẦU HANDLE NEW ===");
-    console.log("Current user:", currentUser);
-    console.log("Review result:", reviewResult);
-    console.log("Language:", language);
-    console.log("Error lines:", reviewResult?.errorLines); // ✅ THÊM log error lines
-
-    // Hỏi user có muốn lưu không (nếu có dữ liệu và chưa phải từ history)
     const shouldSave =
       reviewResult &&
       currentUser &&
       currentUser.username &&
-      !reviewResult.isFromHistory && // Không lưu lại nếu đây là data từ history
+      !reviewResult.isFromHistory &&
       window.confirm("Bạn có muốn lưu kết quả review này vào lịch sử không?");
 
     if (shouldSave) {
       try {
         let userId;
 
-        // Lấy userId
         if (currentUser.id) {
           userId = currentUser.id;
-          console.log("Sử dụng userId từ currentUser:", userId);
         } else {
-          console.log("Lấy userId từ API cho username:", currentUser.username);
-          try {
-            const response = await axios.get(
-              `http://localhost:8000/api/user/${currentUser.username}`,
-              {
-                timeout: 5000,
-              }
-            );
-            userId = response.data.id;
-            console.log("Đã lấy được userId:", userId);
+          const response = await axios.get(
+            `http://localhost:8000/api/user/${currentUser.username}`,
+            { timeout: 5000 }
+          );
+          userId = response.data.id;
 
-            // Cập nhật currentUser với userId
-            const updatedUser = { ...currentUser, id: userId };
-            AuthService.setCurrentUser(updatedUser);
-          } catch (userError) {
-            console.error("Không thể lấy userId:", userError);
-            alert("Không thể lấy thông tin user. Vui lòng đăng nhập lại.");
-            AuthService.logout();
-            navigate("/");
-            return;
-          }
+          const updatedUser = { ...currentUser, id: userId };
+          AuthService.setCurrentUser(updatedUser);
         }
 
-        // ✅ THÊM ERROR LINES VÀO PAYLOAD
         const payload = {
           userId: userId,
           username: currentUser.username,
@@ -84,16 +61,12 @@ const CodeResultPage = () => {
           reviewSummary: reviewResult.feedback || reviewResult.summary || "",
           fixedCode: reviewResult.improvedCode || reviewResult.fixedCode || "",
           language: language || "unknown",
-          errorLines: reviewResult.errorLines || [], // ✅ THÊM error lines
-          type: type || "Re", // ✅ Thêm type cho Review
+          errorLines: reviewResult.errorLines || [],
+          type: type || "Re",
         };
 
-        console.log("Payload gửi đi:", JSON.stringify(payload, null, 2));
-
         const result = await SaveService.saveReview(payload);
-        console.log("✅ Lưu lịch sử thành công!", result);
 
-        // ✅ QUAN TRỌNG: Broadcast event để các component khác biết cần refresh
         window.dispatchEvent(
           new CustomEvent("historyUpdated", {
             detail: {
@@ -103,16 +76,11 @@ const CodeResultPage = () => {
           })
         );
 
-        // ✅ Set flag để CodeEditorPage biết cần refresh
         localStorage.setItem("history_needs_refresh", "true");
         localStorage.setItem("last_save_time", Date.now().toString());
 
-        alert(
-          "✅ Đã lưu kết quả vào lịch sử!\n\nLịch sử sẽ được cập nhật khi bạn quay lại trang chủ."
-        );
+        alert("✅ Đã lưu kết quả vào lịch sử!");
       } catch (err) {
-        console.error("Lỗi khi lưu lịch sử:", err);
-
         let errorMessage = "Không thể lưu lịch sử.";
         if (err.message === "Request timeout") {
           errorMessage = "Lưu lịch sử mất quá nhiều thời gian.";
@@ -124,15 +92,14 @@ const CodeResultPage = () => {
           errorMessage = `Lỗi: ${err.message}`;
         }
 
-        alert(`❌ ${errorMessage}\n\nVui lòng thử lại hoặc liên hệ hỗ trợ.`);
+        alert(`❌ ${errorMessage}`);
       }
     }
 
-    // Reset và chuyển trang (luôn luôn thực hiện)
+    // Reset và chuyển trang
     setCode("");
     setReviewResult(null);
     navigate("/editor", { replace: true });
-    console.log("=== KẾT THÚC HANDLE NEW ===");
   };
 
   const handleLogout = () => {

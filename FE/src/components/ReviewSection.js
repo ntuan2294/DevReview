@@ -1,26 +1,22 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
-import LoadingSpinner from "./LoadingSpinner"; // ✅ Import loading spinner
-import CodeWithHighlight from "./CodeWithHighlight"; // ✅ Import component highlight
+import LoadingSpinner from "./LoadingSpinner";
+import CodeWithHighlight from "./CodeWithHighlight";
 
 const ReviewSection = React.memo(
   ({ code, language, reviewResult, fixedCode, currentUser, onBack, onNew }) => {
-    const [activeTab, setActiveTab] = useState("review"); // 'review' | 'fixed'
-    const [loading, setLoading] = useState(true); // ✅ Thêm biến loading
+    const [activeTab, setActiveTab] = useState("review");
+    const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
-    // ✅ FIXED: Tối ưu useEffect để tránh infinite loop
     useEffect(() => {
-      // Chỉ set loading = false khi có reviewResult
       if (reviewResult) {
         setLoading(false);
         setError(null);
       } else {
-        // Nếu không có reviewResult, giữ loading = true
         setLoading(true);
       }
-    }, [reviewResult]); // ✅ Chỉ phụ thuộc vào reviewResult
+    }, [reviewResult]);
 
-    // ✅ THÊM: useEffect riêng để xử lý error state
     useEffect(() => {
       if (reviewResult && reviewResult.error) {
         setError(reviewResult.error);
@@ -28,13 +24,10 @@ const ReviewSection = React.memo(
       }
     }, [reviewResult]);
 
-    // ✅ OPTIMIZED: Sử dụng useCallback để tránh re-render không cần thiết
     const renderCodeWithLineNumbers = useCallback((codeContent) => {
       if (!codeContent) return "Không có mã nguồn.";
 
-      // Filter out empty lines or lines with only whitespace
       const lines = codeContent.split("\n");
-
       return (
         <div className="font-mono text-sm">
           {lines.map((line, idx) => (
@@ -52,28 +45,61 @@ const ReviewSection = React.memo(
       );
     }, []);
 
-    // ✅ OPTIMIZED: Sử dụng useMemo để cache kết quả format
     const formatReviewFeedback = useCallback((feedback) => {
       if (!feedback) return "Đang xử lý...";
 
+      // Nếu feedback là array (list issues từ backend)
+      if (Array.isArray(feedback)) {
+        if (feedback.length === 0) {
+          return (
+            <div className="p-4 bg-green-50 text-green-700 border border-green-200 rounded">
+              ✅ Không có lỗi được phát hiện
+            </div>
+          );
+        }
+
+        return (
+          <div className="space-y-3">
+            {feedback.map((issue, idx) => (
+              <div
+                key={idx}
+                className={`p-3 rounded border ${
+                  issue.type === "ERROR"
+                    ? "border-red-400 bg-red-50 text-red-700"
+                    : "border-yellow-400 bg-yellow-50 text-yellow-700"
+                }`}
+              >
+                <p>
+                  <strong>{issue.type}</strong> [{issue.code}] tại dòng{" "}
+                  {issue.line}, cột {issue.col}
+                </p>
+                <p>👉 {issue.message}</p>
+                {issue.sourceLine && (
+                  <pre className="bg-gray-100 text-sm p-2 rounded my-1">
+                    {issue.sourceLine}
+                  </pre>
+                )}
+                {issue.suggestion && (
+                  <p className="italic text-gray-600">🔧 {issue.suggestion}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        );
+      }
+
+      // feedback là string (ví dụ dữ liệu cũ từ history)
       let plainText = feedback
-        // Remove code blocks
         .replace(/```[\s\S]*?```/g, "[Code đã được loại bỏ]")
-        // Remove inline code but keep content
         .replace(/`([^`]+)`/g, "$1")
-        // Remove markdown headers but keep content
         .replace(/^#{1,6}\s*/gm, "")
-        // Remove bold/italic but keep content
         .replace(/\*\*(.*?)\*\*/g, "$1")
         .replace(/\*(.*?)\*/g, "$1")
-        // Convert bullet points to simple characters
         .replace(/^\s*[-*+]\s*/gm, "• ")
-        // Remove numbered list markers but keep content
         .replace(/^\s*\d+\.\s*/gm, "")
-        // ✅ ENHANCED: Remove excessive empty lines
-        .replace(/\n\s*\n\s*\n+/g, "\n\n") // Multiple empty lines -> double
-        .replace(/^\s*$/gm, "") // Remove pure empty lines
-        .replace(/\n+/g, "\n") // Multiple newlines -> single
+        .replace(/\n\s*\n\s*\n+/g, "\n\n")
+        .replace(/^\s*$/gm, "")
+        .replace(/\n+/g, "\n")
         .trim();
 
       return (
@@ -91,14 +117,11 @@ const ReviewSection = React.memo(
               return (
                 <p
                   key={idx}
-                  className={`
-              ${isBullet ? "ml-4" : ""}
-              ${
-                isImportant
-                  ? "font-semibold text-red-700 bg-red-50 p-2 rounded"
-                  : ""
-              }
-            `}
+                  className={`${isBullet ? "ml-4" : ""} ${
+                    isImportant
+                      ? "font-semibold text-red-700 bg-red-50 p-2 rounded"
+                      : ""
+                  }`}
                 >
                   {line}
                 </p>
@@ -108,7 +131,6 @@ const ReviewSection = React.memo(
       );
     }, []);
 
-    // ✅ OPTIMIZED: Sử dụng useMemo để cache các giá trị computed
     const improvedCode = useMemo(() => {
       return (
         reviewResult?.improvedCode ||
@@ -126,95 +148,42 @@ const ReviewSection = React.memo(
       return reviewResult?.errorLines || [];
     }, [reviewResult?.errorLines]);
 
-    // ✅ OPTIMIZED: Cache computed values for loading spinner
     const loadingSubmessage = useMemo(() => {
       const lang = language?.toUpperCase() || "N/A";
       const lineCount = code?.split("\n").length || 0;
       return `Đánh giá code ${lang} - ${lineCount} dòng`;
     }, [language, code]);
 
-    // ✅ OPTIMIZED: Sử dụng useCallback cho event handlers
-    const handleTabChange = useCallback((tab) => {
-      setActiveTab(tab);
-    }, []);
-
-    const handleBack = useCallback(() => {
-      onBack();
-    }, [onBack]);
-
-    const handleNew = useCallback(() => {
-      onNew();
-    }, [onNew]);
-
     return (
       <div className="max-w-7xl mx-auto px-6 space-y-6">
-        {/* Header với thông tin */}
+        {/* Header */}
         <div className="flex justify-between items-center bg-white rounded-lg p-4 shadow-sm">
           <div className="flex items-center space-x-4">
             <button
-              onClick={handleBack}
+              onClick={onBack}
               className="flex items-center space-x-2 bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition"
             >
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M15 19l-7-7 7-7"
-                />
-              </svg>
               <span>Quay lại chỉnh sửa</span>
             </button>
 
             {reviewResult?.isFromHistory && (
               <div className="flex items-center space-x-2 text-sm text-blue-600 bg-blue-100 px-3 py-1 rounded">
-                <svg
-                  className="w-4 h-4"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                  />
-                </svg>
                 <span>Từ lịch sử: ID #{reviewResult.historyId}</span>
               </div>
             )}
           </div>
 
           <button
-            onClick={handleNew}
+            onClick={onNew}
             className="flex items-center space-x-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition"
           >
-            <svg
-              className="w-4 h-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 6v6m0 0v6m0-6h6m-6 0H6"
-              />
-            </svg>
             <span>Code mới</span>
           </button>
         </div>
 
-        {/* Bố cục 2 cột */}
+        {/* Layout 2 cột */}
         <div className="grid grid-cols-2 gap-6">
-          {/* ✅ CỘT TRÁI: Sử dụng CodeWithHighlight component */}
+          {/* Cột trái: Code gốc */}
           <div className="bg-white rounded-xl shadow-md p-6">
             <CodeWithHighlight
               code={originalCode}
@@ -224,69 +193,31 @@ const ReviewSection = React.memo(
             />
           </div>
 
-          {/* Cột phải: Tabs Review / Code đã sửa */}
+          {/* Cột phải: Tabs */}
           <div className="bg-white rounded-xl shadow-md p-6 flex flex-col">
-            {/* Tabs */}
             <div className="flex space-x-1 mb-4 bg-gray-100 rounded-lg p-1">
               <button
-                onClick={() => handleTabChange("review")}
+                onClick={() => setActiveTab("review")}
                 className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-all ${
                   activeTab === "review"
                     ? "bg-blue-600 text-white shadow-sm"
                     : "text-gray-600 hover:text-blue-600"
                 }`}
               >
-                <div className="flex items-center justify-center space-x-2">
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                    />
-                  </svg>
-                  <span>Kết quả Review</span>
-                </div>
+                Kết quả Review
               </button>
               <button
-                onClick={() => handleTabChange("fixed")}
+                onClick={() => setActiveTab("fixed")}
                 className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-all ${
                   activeTab === "fixed"
                     ? "bg-green-600 text-white shadow-sm"
                     : "text-gray-600 hover:text-green-600"
                 }`}
               >
-                <div className="flex items-center justify-center space-x-2">
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-                    />
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                    />
-                  </svg>
-                  <span>Code đã cải thiện</span>
-                </div>
+                Code đã cải thiện
               </button>
             </div>
 
-            {/* Nội dung tab */}
             <div className="flex-1 overflow-hidden">
               {activeTab === "review" && (
                 <div className="h-full">
@@ -320,18 +251,6 @@ const ReviewSection = React.memo(
           </div>
         </div>
       </div>
-    );
-  },
-  (prevProps, nextProps) => {
-    // ✅ Custom comparison function để tối ưu re-render
-    return (
-      prevProps.code === nextProps.code &&
-      prevProps.language === nextProps.language &&
-      prevProps.reviewResult === nextProps.reviewResult &&
-      prevProps.fixedCode === nextProps.fixedCode &&
-      prevProps.currentUser === nextProps.currentUser &&
-      prevProps.onBack === nextProps.onBack &&
-      prevProps.onNew === nextProps.onNew
     );
   }
 );
