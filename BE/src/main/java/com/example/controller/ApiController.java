@@ -9,6 +9,7 @@ import com.example.model.ReviewRequest;
 import com.example.service.AIService;
 import com.example.service.ExplainService;
 import com.example.service.ReviewHistoryService;
+import com.example.service.StaticAnalysisService;
 import com.example.service.UserService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.example.service.SuggestNameService; // ✅ THÊM import này
@@ -75,15 +76,28 @@ public class ApiController {
         return res;
     }
 
+    // @PostMapping("/review")
+    // public Map<String, Object> review(@RequestBody ReviewRequest req) {
+    //     System.out.println("Language: " + req.getLanguage());
+    //     System.out.println("Code: " + req.getCode());
+    //     Map<String, Object> result = aiService.reviewCode(req.getLanguage(), req.getCode());
+    //     System.out.println("Result: " + result);
+    //     return result;
+    // }
     @PostMapping("/review")
     public Map<String, Object> review(@RequestBody ReviewRequest req) {
-        System.out.println("Language: " + req.getLanguage());
-        System.out.println("Code: " + req.getCode());
-        Map<String, Object> result = aiService.reviewCode(req.getLanguage(), req.getCode());
-        System.out.println("Result: " + result);
-        return result;
+        Map<String, Object> res = new HashMap<>();
+        try {
+            String feedback = StaticAnalysisService.reviewCode(req.getLanguage(), req.getCode());
+            res.put("success", true);
+            res.put("feedback", feedback);
+        } catch (Exception e) {
+            res.put("success", false);
+            res.put("error", e.getClass().getSimpleName());
+            res.put("message", e.getMessage());
+        }
+        return res;
     }
-
     @PostMapping("/explain")
     public Map<String, Object> explain(@RequestBody ReviewRequest req) {
         System.out.println("Language: " + req.getLanguage());

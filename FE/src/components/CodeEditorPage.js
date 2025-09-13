@@ -6,15 +6,6 @@ import ReviewService from "../services/ReviewService";
 import FileService from "../services/FileService";
 import axios from "axios";
 
-/**
- * CodeEditorPage - sửa lỗi:
- * - Ngăn vòng lặp fetchHistory vô hạn
- * - Dùng historyLoading cục bộ (không phụ thuộc context có thể lỗi)
- * - AbortController + timeout cho fetch
- * - mountedRef tránh setState sau unmount
- * - Khi đã có historyItems thì hiển thị dù có đang refresh
- */
-
 const API_TIMEOUT_MS = 10000;
 
 const CodeEditorPage = () => {
@@ -34,12 +25,17 @@ const CodeEditorPage = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [languageFilter, setLanguageFilter] = useState("all");
   const [historyLoading, setHistoryLoading] = useState(false);
-  const [debugLogs] = useState(false); // bật true để console.log thêm
+  
+  // ✅ FIX 1: Separate state for initial load vs refresh
+  const [hasInitialLoad, setHasInitialLoad] = useState(false);
 
   const currentUser = AuthService.getCurrentUser();
-
   const lastRefreshTimeRef = useRef(0);
   const mountedRef = useRef(true);
+  
+  // ✅ FIX 2: Stable reference for current user
+  const currentUserRef = useRef(currentUser);
+  currentUserRef.current = currentUser;
 
   useEffect(() => {
     mountedRef.current = true;
@@ -62,39 +58,51 @@ const CodeEditorPage = () => {
     return `${typeText} ${lang} Code #${item.id}`;
   };
 
-  // Fetch lịch sử với abort + timeout, bảo vệ mounted
+  // ✅ FIX 3: Optimized fetchHistory with better dependencies
   const fetchHistory = useCallback(
     async (forceRefresh = false) => {
+      const user = currentUserRef.current;
+      
+      // Early returns to prevent unnecessary calls
+      if (!user?.username) {
+        console.log("[fetchHistory] No user, clearing history");
+        if (mountedRef.current) {
+          setHistoryItems([]);
+          setHasInitialLoad(true);
+        }
+        return;
+      }
+
+      // Prevent concurrent requests
       if (!forceRefresh && historyLoading) {
-        if (debugLogs) console.log("[fetchHistory] skipped: already loading");
+        console.log("[fetchHistory] Already loading, skipping");
         return;
       }
 
-      // small debounce: không refresh nếu vừa refresh trong 2s
-      if (!forceRefresh && Date.now() - lastRefreshTimeRef.current < 2000) {
-        if (debugLogs)
-          console.log(
-            "[fetchHistory] skipped: recent refresh",
-            Date.now() - lastRefreshTimeRef.current
-          );
+      // Debounce rapid successive calls
+      const now = Date.now();
+      if (!forceRefresh && now - lastRefreshTimeRef.current < 2000) {
+        console.log("[fetchHistory] Too soon, skipping", now - lastRefreshTimeRef.current);
         return;
       }
 
-      if (!currentUser?.username) {
-        if (debugLogs) console.log("[fetchHistory] no user, clearing history");
-        mountedRef.current && setHistoryItems([]);
+      // Don't fetch if we already have data and it's not a forced refresh
+      if (!forceRefresh && hasInitialLoad && Array.isArray(historyItems) && historyItems.length > 0) {
+        console.log("[fetchHistory] Already have data, skipping");
         return;
       }
 
+      console.log("[fetchHistory] Starting fetch for user:", user.username);
       setHistoryLoading(true);
+      
       const source = axios.CancelToken.source();
       const timeoutId = setTimeout(() => {
-        source.cancel(`timeout after ${API_TIMEOUT_MS}ms`);
+        source.cancel(`Timeout after ${API_TIMEOUT_MS}ms`);
       }, API_TIMEOUT_MS);
 
       try {
         const response = await axios.get(
-          `http://localhost:8000/api/history/${currentUser.username}`,
+          `http://localhost:8000/api/history/${user.username}`,
           {
             headers: { "Cache-Control": "no-cache" },
             cancelToken: source.token,
@@ -105,46 +113,74 @@ const CodeEditorPage = () => {
 
         if (Array.isArray(response.data)) {
           setHistoryItems(response.data);
-          lastRefreshTimeRef.current = Date.now();
+          lastRefreshTimeRef.current = now;
+          setHasInitialLoad(true);
+          console.log("[fetchHistory] Success, loaded", response.data.length, "items");
         } else {
           setHistoryItems([]);
+          setHasInitialLoad(true);
+          console.log("[fetchHistory] Empty or invalid response");
         }
+        
         localStorage.removeItem("history_needs_refresh");
       } catch (error) {
         if (axios.isCancel(error)) {
-          console.warn("[fetchHistory] request cancelled:", error.message);
+          console.warn("[fetchHistory] Request cancelled:", error.message);
         } else {
-          console.error("[fetchHistory] lỗi tải lịch sử:", error);
+          console.error("[fetchHistory] Error loading history:", error);
         }
-        if (mountedRef.current) setHistoryItems((prev) => prev || []);
+        if (mountedRef.current) {
+          // Don't clear existing data on error, just mark as loaded
+          setHasInitialLoad(true);
+        }
       } finally {
         clearTimeout(timeoutId);
-        if (mountedRef.current) setHistoryLoading(false);
+        if (mountedRef.current) {
+          setHistoryLoading(false);
+        }
       }
     },
-    [currentUser, setHistoryItems, historyLoading, debugLogs]
+    [historyItems, historyLoading, hasInitialLoad, setHistoryItems] // ✅ Stable dependencies
   );
 
-  // Load lịch sử khi currentUser thay đổi — chỉ phụ thuộc currentUser
+  // ✅ FIX 4: Separate effect for initial load
   useEffect(() => {
-    if (currentUser?.username) {
+    if (currentUser?.username && !hasInitialLoad) {
+      console.log("[useEffect] Initial load for user:", currentUser.username);
       fetchHistory(true);
-    } else {
-      // nếu chưa login thì clear history
-      setHistoryItems([]);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser]);
+  }, [currentUser?.username, hasInitialLoad, fetchHistory]);
 
-  // Lắng nghe event historyUpdated (global)
+  // ✅ FIX 5: Separate effect for user changes (reset state)
   useEffect(() => {
-    const handleHistoryUpdated = () => fetchHistory(true);
+    if (!currentUser?.username) {
+      console.log("[useEffect] No user, resetting state");
+      setHistoryItems([]);
+      setHasInitialLoad(false);
+    }
+  }, [currentUser?.username, setHistoryItems]);
+
+  // ✅ FIX 6: Event listener with stable function
+  useEffect(() => {
+    const handleHistoryUpdated = () => {
+      console.log("[Event] History updated, forcing refresh");
+      fetchHistory(true);
+    };
+    
     window.addEventListener("historyUpdated", handleHistoryUpdated);
-    return () => window.removeEventListener("historyUpdated", handleHistoryUpdated);
+    return () => {
+      window.removeEventListener("historyUpdated", handleHistoryUpdated);
+    };
   }, [fetchHistory]);
 
-  const handleRefreshHistory = () => fetchHistory(true);
+  // ✅ FIX 7: Manual refresh function
+  const handleRefreshHistory = useCallback(() => {
+    console.log("[Manual] Refresh triggered");
+    setHasInitialLoad(false); // Reset initial load flag to force refresh
+    fetchHistory(true);
+  }, [fetchHistory]);
 
+  // Filtering logic (unchanged)
   const filteredAndSearchedHistory = Array.isArray(historyItems)
     ? historyItems.filter((item) => {
         const matchesLanguage =
@@ -164,6 +200,7 @@ const CodeEditorPage = () => {
     ? [...new Set(historyItems.map((item) => item.language).filter(Boolean))]
     : [];
 
+  // Action handlers (unchanged)
   const handleReview = async () => {
     if (!code.trim()) {
       alert("Vui lòng nhập code trước khi gửi!");
@@ -180,7 +217,7 @@ const CodeEditorPage = () => {
       setReviewResult(result);
       navigate("/result");
     } catch (error) {
-      console.error("[handleReview] ", error);
+      console.error("[handleReview]", error);
       alert("Có lỗi xảy ra khi review code!");
     } finally {
       if (mountedRef.current) setLoadingAction(null);
@@ -227,7 +264,7 @@ const CodeEditorPage = () => {
         alert(result?.error || "Lỗi xử lý file");
       }
     } catch (error) {
-      console.error("[handleFileUpload] ", error);
+      console.error("[handleFileUpload]", error);
       alert("Có lỗi xảy ra khi tải file!");
     }
   };
@@ -269,7 +306,7 @@ const CodeEditorPage = () => {
       else if (historyItem.type === "Su") navigate("/suggest");
       else navigate("/result");
     } catch (error) {
-      console.error("[handleHistoryClick] ", error);
+      console.error("[handleHistoryClick]", error);
       alert("Không thể tải chi tiết lịch sử!");
     }
   };
@@ -351,24 +388,32 @@ const CodeEditorPage = () => {
               </select>
             )}
 
-            {historyLoading && (!Array.isArray(historyItems) || historyItems.length === 0) ? (
-              <div className="text-center text-gray-500 py-8">Đang tải...</div>
+            {/* ✅ FIX 8: Better loading state display */}
+            {historyLoading && !hasInitialLoad ? (
+              <div className="text-center text-gray-500 py-8">
+                <div className="animate-spin w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-2"></div>
+                Đang tải lịch sử...
+              </div>
             ) : filteredAndSearchedHistory.length > 0 ? (
               <div className="space-y-3 max-h-96 overflow-y-auto">
                 {filteredAndSearchedHistory.map((item, i) => (
                   <div
                     key={`${item.id}-${i}`}
                     onClick={() => handleHistoryClick(item)}
-                    className="p-3 border border-gray-200 rounded-lg hover:bg-blue-50 hover:border-blue-300 cursor-pointer"
+                    className="p-3 border border-gray-200 rounded-lg hover:bg-blue-50 hover:border-blue-300 cursor-pointer transition-colors"
                   >
                     <div className="text-sm font-semibold">{createHistoryTitle(item)}</div>
                     {item.originalCode && (
                       <div className="text-xs text-gray-400 font-mono bg-gray-50 p-2 rounded mt-1 line-clamp-2">
-                        {item.originalCode}
+                        {item.originalCode.length > 100 
+                          ? item.originalCode.substring(0, 100) + "..." 
+                          : item.originalCode}
                       </div>
                     )}
                     <div className="flex justify-between text-xs text-gray-500 mt-2">
-                      <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full">{item.language?.toUpperCase() || "N/A"}</span>
+                      <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
+                        {item.language?.toUpperCase() || "N/A"}
+                      </span>
                       <span className="bg-green-100 text-green-800 px-2 py-1 rounded-full">
                         {item.type === "Re" ? "Review" : item.type === "Ex" ? "Explain" : item.type === "Su" ? "Suggest" : "Unknown"}
                       </span>
@@ -376,9 +421,17 @@ const CodeEditorPage = () => {
                     </div>
                   </div>
                 ))}
+                {/* ✅ Show refresh indicator */}
+                {historyLoading && hasInitialLoad && (
+                  <div className="text-center text-gray-400 py-2">
+                    <div className="animate-spin w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full mx-auto"></div>
+                  </div>
+                )}
               </div>
             ) : (
-              <p className="text-center text-gray-500 py-8">Không có lịch sử</p>
+              <div className="text-center text-gray-500 py-8">
+                {hasInitialLoad ? "Không có lịch sử" : "Chưa tải lịch sử"}
+              </div>
             )}
           </div>
 
@@ -414,24 +467,58 @@ const CodeEditorPage = () => {
 
               <div className="flex justify-between items-center">
                 <div className="flex space-x-3">
-                  <button onClick={handleClearCode} className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors">🗑️ Xóa</button>
+                  <button 
+                    onClick={handleClearCode} 
+                    className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
+                  >
+                    🗑️ Xóa
+                  </button>
 
                   <label className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors cursor-pointer">
                     📁 Tải file
-                    <input type="file" onChange={handleFileUpload} className="hidden" accept=".py,.js,.java,.cpp,.cs,.php,.rb,.go" />
+                    <input 
+                      type="file" 
+                      onChange={handleFileUpload} 
+                      className="hidden" 
+                      accept=".py,.js,.java,.cpp,.cs,.php,.rb,.go" 
+                    />
                   </label>
                 </div>
 
                 <div className="flex space-x-3">
-                  <button onClick={handleReview} disabled={loadingAction !== null || !code.trim()} className={`px-6 py-2 rounded-lg font-medium transition-colors ${loadingAction !== null || !code.trim() ? "bg-gray-400 text-gray-600 cursor-not-allowed" : "bg-blue-600 text-white hover:bg-blue-700"}`}>
+                  <button 
+                    onClick={handleReview} 
+                    disabled={loadingAction !== null || !code.trim()} 
+                    className={`px-6 py-2 rounded-lg font-medium transition-colors ${
+                      loadingAction !== null || !code.trim() 
+                        ? "bg-gray-400 text-gray-600 cursor-not-allowed" 
+                        : "bg-blue-600 text-white hover:bg-blue-700"
+                    }`}
+                  >
                     {loadingAction === "review" ? "⏳ Đang phân tích..." : "🚀 Review Code"}
                   </button>
 
-                  <button onClick={handleExplain} disabled={loadingAction !== null || !code.trim()} className={`px-6 py-2 rounded-lg font-medium transition-colors ${loadingAction !== null || !code.trim() ? "bg-gray-400 text-gray-600 cursor-not-allowed" : "bg-purple-600 text-white hover:bg-purple-700"}`}>
+                  <button 
+                    onClick={handleExplain} 
+                    disabled={loadingAction !== null || !code.trim()} 
+                    className={`px-6 py-2 rounded-lg font-medium transition-colors ${
+                      loadingAction !== null || !code.trim() 
+                        ? "bg-gray-400 text-gray-600 cursor-not-allowed" 
+                        : "bg-purple-600 text-white hover:bg-purple-700"
+                    }`}
+                  >
                     {loadingAction === "explain" ? "⏳ Đang giải thích..." : "💡 Explain Code"}
                   </button>
 
-                  <button onClick={handleSuggestName} disabled={loadingAction !== null || !code.trim()} className={`px-6 py-2 rounded-lg font-medium transition-colors ${loadingAction !== null || !code.trim() ? "bg-gray-400 text-gray-600 cursor-not-allowed" : "bg-orange-600 text-white hover:bg-orange-700"}`}>
+                  <button 
+                    onClick={handleSuggestName} 
+                    disabled={loadingAction !== null || !code.trim()} 
+                    className={`px-6 py-2 rounded-lg font-medium transition-colors ${
+                      loadingAction !== null || !code.trim() 
+                        ? "bg-gray-400 text-gray-600 cursor-not-allowed" 
+                        : "bg-orange-600 text-white hover:bg-orange-700"
+                    }`}
+                  >
                     {loadingAction === "suggest" ? "⏳ Đang gợi ý..." : "🏷️ Suggest Name"}
                   </button>
                 </div>
