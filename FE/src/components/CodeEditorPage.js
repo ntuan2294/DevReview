@@ -54,6 +54,8 @@ const CodeEditorPage = () => {
         ? "Explain"
         : type === "Su"
         ? "Suggest"
+        : type === "Te" // ✅ THÊM type cho Testcase
+        ? "Testcase"
         : "Unknown";
     return `${typeText} ${lang} Code #${item.id}`;
   };
@@ -200,7 +202,7 @@ const CodeEditorPage = () => {
     ? [...new Set(historyItems.map((item) => item.language).filter(Boolean))]
     : [];
 
-  // Action handlers (unchanged)
+  // Action handlers
   const handleReview = async () => {
     if (!code.trim()) {
       alert("Vui lòng nhập code trước khi gửi!");
@@ -224,6 +226,17 @@ const CodeEditorPage = () => {
     }
   };
 
+  const handleOptimize = () => {
+    if (!code.trim()) {
+      alert("Please enter code before submitting!");
+      return;
+    }
+    setLoadingAction("optimize");
+    setType("Op");
+    navigate("/optimize");
+    if (mountedRef.current) setLoadingAction(null);
+  };
+
   const handleExplain = () => {
     if (!code.trim()) {
       alert("Vui lòng nhập code trước khi gửi!");
@@ -243,6 +256,18 @@ const CodeEditorPage = () => {
     setLoadingAction("suggest");
     setType("Su");
     navigate("/suggest");
+    if (mountedRef.current) setLoadingAction(null);
+  };
+
+  // ✅ THÊM handler cho Testcase
+  const handleTestcase = () => {
+    if (!code.trim()) {
+      alert("Vui lòng nhập code trước khi gửi!");
+      return;
+    }
+    setLoadingAction("testcase");
+    setType("Te");
+    navigate("/testcase");
     if (mountedRef.current) setLoadingAction(null);
   };
 
@@ -287,12 +312,12 @@ const CodeEditorPage = () => {
       const historyData = response.data;
 
       const reviewResult = {
-        feedback: historyData.reviewSummary || "Không có feedback",
-        improvedCode: historyData.fixedCode || "Không có code đã sửa",
+        feedback: historyData.reviewSummary || "No feedback available",
+        improvedCode: historyData.fixedCode || "No improved code",
         originalCode: historyData.originalCode || "",
         summary: historyData.reviewSummary
           ? historyData.reviewSummary.substring(0, 100) + "..."
-          : "Không có tóm tắt",
+          : "No summary available",
         isFromHistory: true,
         historyId: historyItem.id,
       };
@@ -301,13 +326,16 @@ const CodeEditorPage = () => {
       setCode(historyData.originalCode || "");
       if (historyData.language) setLanguage(historyData.language);
 
+      // THÊM navigation cho optimize
       if (historyItem.type === "Re") navigate("/result");
       else if (historyItem.type === "Ex") navigate("/explain");
       else if (historyItem.type === "Su") navigate("/suggest");
+      else if (historyItem.type === "Te") navigate("/testcase");
+      else if (historyItem.type === "Op") navigate("/optimize"); // THÊM route optimize
       else navigate("/result");
     } catch (error) {
       console.error("[handleHistoryClick]", error);
-      alert("Không thể tải chi tiết lịch sử!");
+      alert("Cannot load history details!");
     }
   };
 
@@ -414,8 +442,19 @@ const CodeEditorPage = () => {
                       <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
                         {item.language?.toUpperCase() || "N/A"}
                       </span>
-                      <span className="bg-green-100 text-green-800 px-2 py-1 rounded-full">
-                        {item.type === "Re" ? "Review" : item.type === "Ex" ? "Explain" : item.type === "Su" ? "Suggest" : "Unknown"}
+                      {/* ✅ THÊM màu cho type Testcase */}
+                      <span className={`px-2 py-1 rounded-full ${
+                        item.type === "Re" ? "bg-blue-100 text-blue-800" :
+                        item.type === "Ex" ? "bg-purple-100 text-purple-800" :
+                        item.type === "Su" ? "bg-orange-100 text-orange-800" :
+                        item.type === "Te" ? "bg-green-100 text-green-800" :
+                        "bg-gray-100 text-gray-800"
+                      }`}>
+                        {item.type === "Re" ? "Review" : 
+                         item.type === "Ex" ? "Explain" : 
+                         item.type === "Su" ? "Suggest" : 
+                         item.type === "Te" ? "Test" : 
+                         "Unknown"}
                       </span>
                       <span>#{item.id}</span>
                     </div>
@@ -435,11 +474,11 @@ const CodeEditorPage = () => {
             )}
           </div>
 
-          {/* Main Editor */}
+          {/* Main Editor - Updated Layout với Vertical Buttons */}
           <div className="col-span-3">
             <div className="bg-white rounded-xl shadow-md p-6">
               <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Ngôn ngữ:</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Language:</label>
                 <select
                   value={language}
                   onChange={(e) => setLanguage(e.target.value)}
@@ -456,26 +495,163 @@ const CodeEditorPage = () => {
                 </select>
               </div>
 
-              <div className="mb-6">
-                <textarea
-                  value={code}
-                  onChange={(e) => setCode(e.target.value)}
-                  placeholder="Nhập code tại đây hoặc chọn từ lịch sử review..."
-                  className="w-full h-96 p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm resize-none"
-                />
-              </div>
+              {/* Code Editor Area với Button Panel bên phải */}
+              <div className="flex gap-4 mb-6">
+                {/* Code Editor - Chiếm phần lớn không gian */}
+                <div className="flex-1">
+                  <textarea
+                    value={code}
+                    onChange={(e) => setCode(e.target.value)}
+                    placeholder="Enter your code here or select from history..."
+                    className="w-full h-96 p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm resize-none"
+                  />
+                </div>
 
-              <div className="flex justify-between items-center">
-                <div className="flex space-x-3">
+                {/* Vertical Button Panel - Bên phải */}
+                <div className="flex flex-col space-y-3 min-w-[140px]">
                   <button 
-                    onClick={handleClearCode} 
-                    className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
+                    onClick={handleReview} 
+                    disabled={loadingAction !== null || !code.trim()} 
+                    className={`w-full px-4 py-3 rounded-lg font-medium transition-all duration-200 flex flex-col items-center space-y-1 ${
+                      loadingAction !== null || !code.trim() 
+                        ? "bg-gray-200 text-gray-500 cursor-not-allowed" 
+                        : "bg-blue-600 text-white hover:bg-blue-700 hover:shadow-lg transform hover:-translate-y-0.5"
+                    }`}
                   >
-                    🗑️ Xóa
+                    {loadingAction === "review" ? (
+                      <>
+                        <div className="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full"></div>
+                        <span className="text-xs">Reviewing...</span>
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span className="text-sm font-semibold">Review</span>
+                        <span className="text-xs opacity-90">Code</span>
+                      </>
+                    )}
                   </button>
 
-                  <label className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors cursor-pointer">
-                    📁 Tải file
+                  <button 
+                    onClick={handleExplain} 
+                    disabled={loadingAction !== null || !code.trim()} 
+                    className={`w-full px-4 py-3 rounded-lg font-medium transition-all duration-200 flex flex-col items-center space-y-1 ${
+                      loadingAction !== null || !code.trim() 
+                        ? "bg-gray-200 text-gray-500 cursor-not-allowed" 
+                        : "bg-purple-600 text-white hover:bg-purple-700 hover:shadow-lg transform hover:-translate-y-0.5"
+                    }`}
+                  >
+                    {loadingAction === "explain" ? (
+                      <>
+                        <div className="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full"></div>
+                        <span className="text-xs">Explaining...</span>
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span className="text-sm font-semibold">Explain</span>
+                        <span className="text-xs opacity-90">Code</span>
+                      </>
+                    )}
+                  </button>
+
+                  <button 
+                    onClick={handleSuggestName} 
+                    disabled={loadingAction !== null || !code.trim()} 
+                    className={`w-full px-4 py-3 rounded-lg font-medium transition-all duration-200 flex flex-col items-center space-y-1 ${
+                      loadingAction !== null || !code.trim() 
+                        ? "bg-gray-200 text-gray-500 cursor-not-allowed" 
+                        : "bg-orange-600 text-white hover:bg-orange-700 hover:shadow-lg transform hover:-translate-y-0.5"
+                    }`}
+                  >
+                    {loadingAction === "suggest" ? (
+                      <>
+                        <div className="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full"></div>
+                        <span className="text-xs">Suggesting...</span>
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                        </svg>
+                        <span className="text-sm font-semibold">Suggest</span>
+                        <span className="text-xs opacity-90">Names</span>
+                      </>
+                    )}
+                  </button>
+
+                  <button 
+                    onClick={handleTestcase} 
+                    disabled={loadingAction !== null || !code.trim()} 
+                    className={`w-full px-4 py-3 rounded-lg font-medium transition-all duration-200 flex flex-col items-center space-y-1 ${
+                      loadingAction !== null || !code.trim() 
+                        ? "bg-gray-200 text-gray-500 cursor-not-allowed" 
+                        : "bg-green-600 text-white hover:bg-green-700 hover:shadow-lg transform hover:-translate-y-0.5"
+                    }`}
+                  >
+                    {loadingAction === "testcase" ? (
+                      <>
+                        <div className="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full"></div>
+                        <span className="text-xs">Generating...</span>
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                        </svg>
+                        <span className="text-sm font-semibold">Generate</span>
+                        <span className="text-xs opacity-90">Tests</span>
+                      </>
+                    )}
+                  </button>
+
+                  <button 
+                    onClick={handleOptimize} 
+                    disabled={loadingAction !== null || !code.trim()} 
+                    className={`w-full px-4 py-3 rounded-lg font-medium transition-all duration-200 flex flex-col items-center space-y-1 ${
+                      loadingAction !== null || !code.trim() 
+                        ? "bg-gray-200 text-gray-500 cursor-not-allowed" 
+                        : "bg-pink-600 text-white hover:bg-pink-700 hover:shadow-lg transform hover:-translate-y-0.5"
+                    }`}
+                  >
+                    {loadingAction === "testcase" ? (
+                      <>
+                        <div className="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full"></div>
+                        <span className="text-xs">Generating...</span>
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                        </svg>
+                        <span className="text-sm font-semibold">Optimize</span>
+                        <span className="text-xs opacity-90">Code</span>
+                      </>
+                    )}
+                  </button>
+                  {/* Divider */}
+                  <div className="border-t border-gray-200 my-2"></div>
+
+                  {/* Utility Buttons */}
+                  <button 
+                    onClick={handleClearCode} 
+                    className="w-full px-4 py-2 text-sm bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-all duration-200 flex items-center justify-center space-x-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    <span>Clear</span>
+                  </button>
+
+                  <label className="w-full px-4 py-2 text-sm bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-all duration-200 cursor-pointer flex items-center justify-center space-x-2">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                    </svg>
+                    <span>Upload</span>
                     <input 
                       type="file" 
                       onChange={handleFileUpload} 
@@ -483,44 +659,6 @@ const CodeEditorPage = () => {
                       accept=".py,.js,.java,.cpp,.cs,.php,.rb,.go" 
                     />
                   </label>
-                </div>
-
-                <div className="flex space-x-3">
-                  <button 
-                    onClick={handleReview} 
-                    disabled={loadingAction !== null || !code.trim()} 
-                    className={`px-6 py-2 rounded-lg font-medium transition-colors ${
-                      loadingAction !== null || !code.trim() 
-                        ? "bg-gray-400 text-gray-600 cursor-not-allowed" 
-                        : "bg-blue-600 text-white hover:bg-blue-700"
-                    }`}
-                  >
-                    {loadingAction === "review" ? "⏳ Đang phân tích..." : "🚀 Review Code"}
-                  </button>
-
-                  <button 
-                    onClick={handleExplain} 
-                    disabled={loadingAction !== null || !code.trim()} 
-                    className={`px-6 py-2 rounded-lg font-medium transition-colors ${
-                      loadingAction !== null || !code.trim() 
-                        ? "bg-gray-400 text-gray-600 cursor-not-allowed" 
-                        : "bg-purple-600 text-white hover:bg-purple-700"
-                    }`}
-                  >
-                    {loadingAction === "explain" ? "⏳ Đang giải thích..." : "💡 Explain Code"}
-                  </button>
-
-                  <button 
-                    onClick={handleSuggestName} 
-                    disabled={loadingAction !== null || !code.trim()} 
-                    className={`px-6 py-2 rounded-lg font-medium transition-colors ${
-                      loadingAction !== null || !code.trim() 
-                        ? "bg-gray-400 text-gray-600 cursor-not-allowed" 
-                        : "bg-orange-600 text-white hover:bg-orange-700"
-                    }`}
-                  >
-                    {loadingAction === "suggest" ? "⏳ Đang gợi ý..." : "🏷️ Suggest Name"}
-                  </button>
                 </div>
               </div>
             </div>

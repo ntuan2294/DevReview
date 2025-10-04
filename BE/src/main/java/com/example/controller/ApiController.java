@@ -6,14 +6,16 @@ import com.example.repository.ReviewHistoryRepository;
 import com.example.repository.UserRepository;
 import com.example.model.ReviewHistory;
 import com.example.model.ReviewRequest;
-import com.example.service.AIService;
 import com.example.service.ExplainService;
+import com.example.service.OptimizeService;
 import com.example.service.ReviewHistoryService;
 import com.example.service.StaticAnalysisService;
 import com.example.service.StaticAnalysisService.Issue;
 import com.example.service.UserService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.example.service.SuggestNameService; // ✅ THÊM import này
+import com.example.service.TestcaseService;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -27,6 +29,9 @@ import java.util.stream.Collectors;
 @RequestMapping("/api")
 @CrossOrigin(origins = "*")
 public class ApiController {
+
+    @Autowired
+    private OptimizeService optimizeService; // THÊM autowired
 
     @Autowired
     private UserService userService;
@@ -46,6 +51,9 @@ public class ApiController {
     @Autowired
     private SuggestNameService suggestNameService; // ✅ THÊM autowired này
 
+    @Autowired
+    private TestcaseService testcaseService; // ✅ THÊM autowired
+
     @PostMapping("/login")
     public Map<String, Object> login(@RequestBody UserRequest req) {
         Map<String, Object> res = new HashMap<>();
@@ -60,6 +68,52 @@ public class ApiController {
         return res;
     }
 
+    // THÊM optimize endpoint
+    @PostMapping("/optimize")
+    public ResponseEntity<Map<String, Object>> optimizeCode(@RequestBody ReviewRequest req) {
+        try {
+            System.out.println("=== OPTIMIZE API CALLED ===");
+            System.out.println("Language: " + req.getLanguage());
+            System.out.println("Code length: " + (req.getCode() != null ? req.getCode().length() : 0));
+            System.out.println("User: " + req.getUser());
+            
+            // Validation
+            if (req.getCode() == null || req.getCode().trim().isEmpty()) {
+                Map<String, Object> errorResponse = new HashMap<>();
+                errorResponse.put("success", false);
+                errorResponse.put("message", "Code không được để trống");
+                return ResponseEntity.badRequest().body(errorResponse);
+            }
+            
+            if (req.getLanguage() == null || req.getLanguage().trim().isEmpty()) {
+                Map<String, Object> errorResponse = new HashMap<>();
+                errorResponse.put("success", false);
+                errorResponse.put("message", "Language không được để trống");
+                return ResponseEntity.badRequest().body(errorResponse);
+            }
+            
+            // Gọi service
+            Map<String, Object> result = optimizeService.optimizeCode(req.getLanguage(), req.getCode());
+            System.out.println("Optimize result keys: " + result.keySet());
+            
+            // Đảm bảo có success field
+            result.put("success", true);
+            
+            return ResponseEntity.ok(result);
+            
+        } catch (Exception e) {
+            System.err.println("❌ Error in optimize endpoint: " + e.getMessage());
+            e.printStackTrace();
+            
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("success", false);
+            errorResponse.put("message", "Lỗi khi tối ưu hóa code: " + e.getMessage());
+            errorResponse.put("error", e.getClass().getSimpleName());
+            
+            return ResponseEntity.status(500).body(errorResponse);
+        }
+    }
+    
     @PostMapping("/register")
     public Map<String, Object> register(@RequestBody UserRequest req) {
         Map<String, Object> res = new HashMap<>();
@@ -448,6 +502,51 @@ public class ApiController {
         } catch (Exception e) {
             e.printStackTrace();
             return ResponseEntity.ok(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/testcase")
+    public ResponseEntity<Map<String, Object>> generateTestcases(@RequestBody ReviewRequest req) {
+        try {
+            System.out.println("=== TESTCASE API CALLED ===");
+            System.out.println("Language: " + req.getLanguage());
+            System.out.println("Code length: " + (req.getCode() != null ? req.getCode().length() : 0));
+            System.out.println("User: " + req.getUser());
+            
+            // ✅ Validation
+            if (req.getCode() == null || req.getCode().trim().isEmpty()) {
+                Map<String, Object> errorResponse = new HashMap<>();
+                errorResponse.put("success", false);
+                errorResponse.put("message", "Code không được để trống");
+                return ResponseEntity.badRequest().body(errorResponse);
+            }
+            
+            if (req.getLanguage() == null || req.getLanguage().trim().isEmpty()) {
+                Map<String, Object> errorResponse = new HashMap<>();
+                errorResponse.put("success", false);
+                errorResponse.put("message", "Language không được để trống");
+                return ResponseEntity.badRequest().body(errorResponse);
+            }
+            
+            // ✅ Gọi service
+            Map<String, Object> result = testcaseService.generateTestcases(req.getLanguage(), req.getCode());
+            System.out.println("Testcase result keys: " + result.keySet());
+            
+            // ✅ Đảm bảo có success field
+            result.put("success", true);
+            
+            return ResponseEntity.ok(result);
+            
+        } catch (Exception e) {
+            System.err.println("❌ Error in testcase endpoint: " + e.getMessage());
+            e.printStackTrace();
+            
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("success", false);
+            errorResponse.put("message", "Lỗi khi tạo test cases: " + e.getMessage());
+            errorResponse.put("error", e.getClass().getSimpleName());
+            
+            return ResponseEntity.status(500).body(errorResponse);
         }
     }
 }

@@ -17,7 +17,7 @@ import java.util.Map;
 @Service
 public class SuggestNameService {
 
-    private static final String API_KEY = "AIzaSyAcfZKJCZpQZZIA7sVjHl-ss5apA8J083Y";
+    private static final String API_KEY = "AIzaSyAl2n9dlc8ofWr8s4LZxV-M9bCLkTWLX8s";
     private static final String BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models/";
     private static final String MODEL = "gemini-2.0-flash";
     private static final String GENERATE_CONTENT_ENDPOINT = ":generateContent?key=";

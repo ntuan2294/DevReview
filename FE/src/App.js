@@ -4,6 +4,8 @@ import CodeResultPage from "./components/CodeResultPage";
 import { CodeProvider } from "./components/CodeContext";
 import ExplainCodePage from "./components/ExplainCodePage";
 import SuggestNamePage from "./components/SuggestNamePage";
+import TestcasePage from "./components/TestcasePage";
+import OptimizePage from "./components/OptimizePage"; // THÊM import OptimizePage
 import Login from "./components/Login";
 
 function App() {
@@ -16,6 +18,8 @@ function App() {
           <Route path="/result" element={<CodeResultPage />} />
           <Route path="/explain" element={<ExplainCodePage />} />
           <Route path="/suggest" element={<SuggestNamePage />} />
+          <Route path="/testcase" element={<TestcasePage />} />
+          <Route path="/optimize" element={<OptimizePage />} /> {/* THÊM route optimize */}
         </Routes>
       </CodeProvider>
     </Router>
